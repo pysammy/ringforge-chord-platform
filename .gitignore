@@ -12,6 +12,7 @@ target/
 
 # Logs and local output
 *.log
+*.pid
 run_output*.txt
 
 # Environment

@@ -146,7 +146,7 @@ Deliverable:
 
 Goal: make nodes communicate like real distributed services.
 
-Status: storage transport foundation complete; full node-to-node routing remains future work.
+Status: storage transport and first node-to-node routing foundation complete; dynamic membership remains future work.
 
 Example local usage:
 
@@ -173,12 +173,16 @@ Current implementation:
 - standalone HTTP node storage server
 - HTTP-backed `KeyValueStore`
 - tests proving Chord can place and look up keys through remote stores
+- independent Chord node HTTP service
+- node-to-node lookup forwarding
+- routed key writes over HTTP
+- service tests verifying forwarded paths and finger shortcuts
 
 Remaining work:
 
-- move successor/predecessor/finger ownership into individual node processes
-- add node-to-node lookup forwarding
 - add membership gossip or a control-plane bootstrap service
+- add dynamic join/stabilization endpoints
+- add heartbeat-based failure detection
 - add process supervision scripts
 
 ## Phase 6: Replication

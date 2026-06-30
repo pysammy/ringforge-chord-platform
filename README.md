@@ -118,6 +118,8 @@ Implemented so far:
 - benchmark endpoint for lookup-hop accuracy checks
 - HTTP-backed remote `KeyValueStore` client
 - standalone node storage server for multi-process storage experiments
+- independent Chord node service with HTTP lookup forwarding
+- service-level integration tests that route requests across multiple node processes
 - local HTTP API
 - browser-based RingForge Console
 - JUnit tests for range handling, lookup behavior, migration, and stale finger-table prevention
@@ -190,6 +192,26 @@ GET  /store/snapshot
 POST /store/delete?key=42
 POST /store/drain
 ```
+
+The first service-node runtime is also available through:
+
+```text
+ServiceChordNode
+ServiceChordNodeServer
+ServiceChordClient
+```
+
+This runtime supports independent HTTP Chord nodes with:
+
+```text
+GET  /node/state
+GET  /node/health
+GET  /lookup?key=...
+POST /keys/put?key=...&value=...
+GET  /keys/local?key=...
+```
+
+The current service-node implementation assumes a deterministic member list is configured before routing. Dynamic join, stabilization, and heartbeat repair are the next service-runtime steps.
 
 ## Current Reliability Behavior
 

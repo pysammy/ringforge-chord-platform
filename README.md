@@ -1,0 +1,163 @@
+# RingForge: Java Chord DHT Platform
+
+RingForge is the planned Java rewrite and expansion of the existing C++ Chord implementation. The goal is not only to port the algorithm, but to grow it into a backend and infrastructure-heavy distributed key-value platform based on Chord-style routing.
+
+The first milestone will preserve the original educational behavior: an in-memory Chord ring, node joins, node leaves, finger tables, key insertion, lookup, and key migration. Later milestones will turn the simulation into a real multi-process service with networking, replication, failure detection, observability, and automated correctness testing.
+
+## Why This Project Exists
+
+The current C++ project demonstrates the Chord Distributed Hash Table algorithm in one process. That is useful for learning, but backend and infrastructure systems usually require more:
+
+- nodes that communicate over the network
+- APIs for storing and retrieving data
+- fault tolerance when machines crash
+- replication so data is not lost
+- metrics, logs, and debugging tools
+- repeatable tests under node churn
+
+RingForge is intended to bridge that gap.
+
+## Project Vision
+
+Build a Java-based distributed key-value store that uses Chord DHT routing to locate the node responsible for each key.
+
+At maturity, the project should support:
+
+- in-memory and optional persistent storage
+- dynamic node join and leave
+- finger-table based lookup
+- background stabilization
+- successor-based replication
+- heartbeat-based failure detection
+- HTTP or gRPC APIs
+- CLI tools for operating a local cluster
+- Prometheus-style metrics
+- randomized simulation tests
+- optional LLM-powered operations assistant
+
+## Intended Users
+
+This project is designed for learning and demonstration across:
+
+- backend engineering
+- distributed systems
+- infrastructure engineering
+- platform engineering
+- data systems
+- SDE interview preparation
+
+## Non-Goals For The First Version
+
+The first Java version will not try to be production-ready. It will focus on correctness and clean design before distributed networking is introduced.
+
+Initial non-goals:
+
+- no Kubernetes deployment
+- no real persistence engine
+- no cross-datacenter replication
+- no Byzantine fault tolerance
+- no consensus protocol such as Raft or Paxos
+
+Those can be explored later if the core system becomes stable.
+
+## Repository Layout
+
+```text
+ringforge-chord-platform/
+  README.md
+  pom.xml
+  docs/
+    EXECUTION_PLAN.md
+    ARCHITECTURE.md
+    LLM_INTEGRATION.md
+  src/
+    main/java/com/ringforge/chord/
+    test/java/com/ringforge/chord/
+```
+
+## Development Approach
+
+This project will be built in phases:
+
+1. Port the C++ simulation to clean Java domain objects.
+2. Add automated tests for ring correctness.
+3. Separate algorithm code from demo code.
+4. Add an API layer.
+5. Run multiple nodes as separate local processes.
+6. Add replication and failure detection.
+7. Add observability and operational tooling.
+8. Add optional LLM-powered analysis and assistant features.
+
+See [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md) for the full step-by-step plan.
+
+## Suggested Initial Commands
+
+After implementation begins:
+
+```bash
+mvn test
+mvn package
+java -jar target/ringforge-chord-platform.jar
+```
+
+## Current Status
+
+Status: Phase 1 implementation started.
+
+Implemented so far:
+
+- Java in-memory Chord ring simulation
+- finger-table construction
+- key insertion and lookup
+- key migration on join and leave
+- invariant-based health checks
+- local HTTP API
+- browser-based RingForge Console
+- JUnit tests for range handling, lookup behavior, migration, and stale finger-table prevention
+
+## Problem Focus
+
+RingForge is not intended to be a technology collage. The project is centered on one distributed systems problem:
+
+> How can an engineer verify and repair key placement and routing behavior while a distributed key-value cluster changes shape?
+
+That means the project prioritizes:
+
+- knowing which node owns each key
+- proving that active routing tables do not point to departed nodes
+- tracing why a lookup took a specific path
+- detecting key placement mistakes
+- preparing clean extension points for durable storage, event streams, deployment, and LLM-assisted operations
+
+## Run The Current Java Version
+
+Run tests:
+
+```bash
+mvn test
+```
+
+Run the console server:
+
+```bash
+mvn package
+java -cp target/classes com.ringforge.chord.app.RingForgeServer 8080
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+Useful API endpoints:
+
+```text
+GET  /api/snapshot
+GET  /api/lookup?start=0&key=99
+POST /api/leave?node=65
+POST /api/join?node=65
+POST /api/repair
+POST /api/reset
+POST /api/put?key=77&value=manual
+```

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RingForge Console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <h1>RingForge Console</h1>
+        <p id="problem">Reliable key placement and routing diagnostics under node churn</p>
+      </div>
+      <div class="status-strip">
+        <span id="healthBadge" class="badge">Loading</span>
+        <span id="nodeCount">0 nodes</span>
+        <span id="keyCount">0 keys</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="workspace">
+        <div class="toolbar">
+          <label>
+            Start
+            <select id="startNode"></select>
+          </label>
+          <label>
+            Key
+            <input id="lookupKey" type="number" min="0" max="255" value="99">
+          </label>
+          <button id="lookupButton">Lookup</button>
+          <button id="leaveButton">Leave 65</button>
+          <button id="joinButton">Join 65</button>
+          <button id="repairButton">Repair</button>
+          <button id="resetButton">Reset</button>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="ringCanvas" width="940" height="560"></canvas>
+        </div>
+      </section>
+
+      <aside class="inspector">
+        <section>
+          <h2>Lookup Trace</h2>
+          <div id="lookupTrace" class="trace">Run a lookup to inspect the path.</div>
+        </section>
+
+        <section>
+          <h2>Health</h2>
+          <div id="healthList" class="health-list"></div>
+        </section>
+
+        <section>
+          <h2>Key Distribution</h2>
+          <div id="distribution" class="distribution"></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

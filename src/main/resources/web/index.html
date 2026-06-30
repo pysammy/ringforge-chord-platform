@@ -33,8 +33,10 @@
           </label>
           <button id="lookupButton">Lookup</button>
           <button id="leaveButton">Leave 65</button>
+          <button id="crashButton">Crash 65</button>
           <button id="joinButton">Join 65</button>
           <button id="repairButton">Repair</button>
+          <button id="benchmarkButton">Benchmark</button>
           <button id="resetButton">Reset</button>
         </div>
 
@@ -55,8 +57,28 @@
         </section>
 
         <section>
+          <h2>Diagnostics</h2>
+          <div id="diagnosticsList" class="diagnostics-list"></div>
+        </section>
+
+        <section>
+          <h2>Ops Advice</h2>
+          <div id="opsAdvice" class="ops-advice"></div>
+        </section>
+
+        <section>
           <h2>Key Distribution</h2>
           <div id="distribution" class="distribution"></div>
+        </section>
+
+        <section>
+          <h2>Replica Placement</h2>
+          <div id="replicas" class="distribution"></div>
+        </section>
+
+        <section>
+          <h2>Benchmark</h2>
+          <div id="benchmarkResult" class="trace">Run a benchmark to measure lookup hops.</div>
         </section>
 
         <section>

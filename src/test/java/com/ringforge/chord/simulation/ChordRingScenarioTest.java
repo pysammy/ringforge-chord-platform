@@ -91,4 +91,57 @@ class ChordRingScenarioTest {
         assertTrue(eventTypes.contains(EventType.LOOKUP_COMPLETED));
         assertTrue(eventTypes.contains(EventType.NODE_LEFT));
     }
+
+    @Test
+    void everyPrimaryKeyHasExpectedSuccessorReplicas() {
+        ChordRing ring = SampleScenario.build();
+        int expectedReplicas = 2;
+
+        for (Map.Entry<Integer, Map<Integer, String>> ownerEntry : ring.keyDistribution().entrySet()) {
+            for (Integer key : ownerEntry.getValue().keySet()) {
+                int actualReplicas = 0;
+                for (Map<Integer, String> replicas : ring.replicaDistribution().values()) {
+                    if (replicas.containsKey(key)) {
+                        actualReplicas++;
+                    }
+                }
+                assertEquals(expectedReplicas, actualReplicas, "replica count for key " + key);
+            }
+        }
+
+        assertTrue(ring.diagnostics().healthy());
+    }
+
+    @Test
+    void crashPromotesReplicasAndPreservesLookups() {
+        ChordRing ring = SampleScenario.build();
+
+        ring.crash(65);
+
+        assertFalse(ring.activeNodeIds().contains(65));
+        assertTrue(ring.failedNodeIds().contains(65));
+        assertEquals("3", ring.keyDistribution().get(100).get(45));
+        assertEquals("8", ring.keyDistribution().get(100).get(50));
+        assertEquals("10", ring.keyDistribution().get(100).get(60));
+
+        LookupResult lookup = ring.lookup(0, 45);
+        assertTrue(lookup.found());
+        assertEquals("3", lookup.value().orElseThrow(AssertionError::new));
+        assertEquals(100, lookup.responsibleNodeId());
+        assertFalse(lookup.path().contains(65));
+        assertTrue(ring.diagnostics().healthy());
+    }
+
+    @Test
+    void benchmarkMeasuresExpectedLookupPerformance() {
+        ChordRing ring = SampleScenario.build();
+
+        com.ringforge.chord.metrics.BenchmarkReport report = ring.benchmark();
+
+        assertEquals(84, report.lookupCount());
+        assertEquals(7, report.nodeCount());
+        assertEquals(12, report.keyCount());
+        assertTrue(report.maxHops() <= 4, "unexpectedly high max hop count: " + report.maxHops());
+        assertTrue(report.healthy());
+    }
 }

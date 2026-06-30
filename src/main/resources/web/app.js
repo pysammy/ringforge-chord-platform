@@ -43,7 +43,10 @@ function renderSnapshot() {
   }
 
   renderHealth(snapshot);
+  renderDiagnostics(snapshot);
+  renderAdvice(snapshot);
   renderDistribution(snapshot);
+  renderReplicas(snapshot);
   renderEvents(snapshot);
   drawRing(snapshot, state.lookup);
 }
@@ -82,6 +85,57 @@ function renderDistribution(snapshot) {
       : "empty";
     row.append(title, keys);
     distribution.appendChild(row);
+  });
+}
+
+function renderReplicas(snapshot) {
+  const replicas = document.getElementById("replicas");
+  replicas.innerHTML = "";
+  snapshot.nodes.forEach((node) => {
+    const row = document.createElement("div");
+    row.className = "node-row";
+    const title = document.createElement("strong");
+    title.textContent = `Node ${node.id}`;
+    const keys = document.createElement("span");
+    keys.className = "keys";
+    const entries = Object.entries(node.replicas || {});
+    keys.textContent = entries.length
+      ? entries.map(([key, value]) => `${key}:${value}`).join(", ")
+      : "no replicas";
+    row.append(title, keys);
+    replicas.appendChild(row);
+  });
+}
+
+function renderDiagnostics(snapshot) {
+  const diagnostics = document.getElementById("diagnosticsList");
+  diagnostics.innerHTML = "";
+  const findings = snapshot.diagnostics?.findings || [];
+  if (!findings.length) {
+    const row = document.createElement("div");
+    row.className = "diagnostic";
+    row.textContent = "No diagnostic findings. Ownership, routing, and replicas are consistent.";
+    diagnostics.appendChild(row);
+    return;
+  }
+  findings.forEach((finding) => {
+    const row = document.createElement("div");
+    row.className = `diagnostic ${finding.severity.toLowerCase()}`;
+    row.textContent = `${finding.severity} · ${finding.category}: ${finding.message}`;
+    diagnostics.appendChild(row);
+  });
+}
+
+function renderAdvice(snapshot) {
+  const advice = document.getElementById("opsAdvice");
+  advice.innerHTML = "";
+  const summary = snapshot.opsAdvice?.summary || [];
+  const actions = snapshot.opsAdvice?.recommendedActions || [];
+  [...summary, ...actions].forEach((text) => {
+    const row = document.createElement("div");
+    row.className = "advice-row";
+    row.textContent = text;
+    advice.appendChild(row);
   });
 }
 
@@ -238,10 +292,26 @@ async function mutate(path) {
   }
 }
 
+async function runBenchmark() {
+  try {
+    const result = await api("/api/benchmark", { method: "POST" });
+    const target = document.getElementById("benchmarkResult");
+    target.innerHTML = `
+      <div><strong>${result.lookupCount}</strong> lookups across <strong>${result.nodeCount}</strong> nodes and <strong>${result.keyCount}</strong> keys</div>
+      <div>Average hops: <strong>${result.averageHops.toFixed(2)}</strong> · Max hops: <strong>${result.maxHops}</strong> · Healthy: <strong>${result.healthy}</strong></div>
+    `;
+    await refresh();
+  } catch (error) {
+    document.getElementById("benchmarkResult").textContent = error.message;
+  }
+}
+
 document.getElementById("lookupButton").addEventListener("click", performLookup);
 document.getElementById("leaveButton").addEventListener("click", () => mutate("/api/leave?node=65"));
+document.getElementById("crashButton").addEventListener("click", () => mutate("/api/crash?node=65"));
 document.getElementById("joinButton").addEventListener("click", () => mutate("/api/join?node=65"));
 document.getElementById("repairButton").addEventListener("click", () => mutate("/api/repair"));
+document.getElementById("benchmarkButton").addEventListener("click", runBenchmark);
 document.getElementById("resetButton").addEventListener("click", () => mutate("/api/reset"));
 window.addEventListener("resize", () => state.snapshot && drawRing(state.snapshot, state.lookup));
 

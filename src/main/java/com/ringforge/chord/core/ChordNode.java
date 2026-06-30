@@ -9,6 +9,7 @@ public final class ChordNode {
     private final int id;
     private final FingerTable fingerTable = new FingerTable();
     private final KeyValueStore store;
+    private final KeyValueStore replicaStore = new InMemoryKeyValueStore();
     private ChordNode predecessor;
     private ChordNode successor;
 
@@ -49,6 +50,10 @@ public final class ChordNode {
         return store;
     }
 
+    public KeyValueStore replicaStore() {
+        return replicaStore;
+    }
+
     public boolean isResponsibleFor(int key, IdentifierRing ring) {
         if (predecessor == null) {
             return true;
@@ -68,5 +73,13 @@ public final class ChordNode {
 
     public Map<Integer, String> snapshotKeys() {
         return store.snapshot();
+    }
+
+    public Map<Integer, String> snapshotReplicas() {
+        return replicaStore.snapshot();
+    }
+
+    public void clearReplicas() {
+        replicaStore.drain();
     }
 }

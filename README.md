@@ -110,8 +110,12 @@ Implemented so far:
 - finger-table construction
 - key insertion and lookup
 - key migration on join and leave
+- successor replication with replication factor 3
+- simulated node crash with replica promotion
 - invariant-based health checks
 - structured event log for joins, leaves, lookups, key storage, key deletion, migrations, and repairs
+- deterministic diagnostics and ops advice
+- benchmark endpoint for lookup-hop accuracy checks
 - local HTTP API
 - browser-based RingForge Console
 - JUnit tests for range handling, lookup behavior, migration, and stale finger-table prevention
@@ -156,10 +160,31 @@ Useful API endpoints:
 ```text
 GET  /api/snapshot
 GET  /api/events?limit=100
+GET  /api/diagnostics
+GET  /api/advice
 GET  /api/lookup?start=0&key=99
+POST /api/benchmark
 POST /api/leave?node=65
+POST /api/crash?node=65
 POST /api/join?node=65
 POST /api/repair
 POST /api/reset
 POST /api/put?key=77&value=manual
 ```
+
+## Current Reliability Behavior
+
+RingForge currently uses in-memory storage, but it already models reliability behavior that production systems care about:
+
+- every primary key is replicated to successor nodes
+- a graceful leave migrates primary keys to the next owner
+- a crash does not use graceful handoff; surviving replicas are promoted
+- diagnostics verify routing links, key ownership, and replica count
+- benchmark checks lookup behavior across every active node and primary key
+
+External technologies should attach to those proven seams:
+
+- Redis can implement `KeyValueStore`.
+- Kafka can persist the structured event log.
+- Kubernetes can run multi-process nodes after the network transport phase.
+- LLMs can summarize diagnostics, event logs, benchmarks, and repair recommendations.

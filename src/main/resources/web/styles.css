@@ -191,6 +191,8 @@ h2 {
 }
 
 .health-list,
+.diagnostics-list,
+.ops-advice,
 .distribution,
 .event-timeline {
   display: grid;
@@ -198,6 +200,8 @@ h2 {
 }
 
 .finding,
+.diagnostic,
+.advice-row,
 .node-row,
 .event-row {
   display: flex;
@@ -209,17 +213,30 @@ h2 {
 }
 
 .finding:first-child,
+.diagnostic:first-child,
+.advice-row:first-child,
 .node-row:first-child,
 .event-row:first-child {
   border-top: 0;
 }
 
-.finding {
+.finding,
+.diagnostic,
+.advice-row {
   color: var(--muted);
 }
 
-.finding.error {
+.finding.error,
+.diagnostic.error {
   color: var(--red);
+}
+
+.diagnostic.warn {
+  color: var(--amber);
+}
+
+.diagnostic.info {
+  color: var(--blue);
 }
 
 .keys {

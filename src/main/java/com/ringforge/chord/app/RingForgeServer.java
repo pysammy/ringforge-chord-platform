@@ -30,11 +30,15 @@ public final class RingForgeServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/snapshot", app::snapshot);
         server.createContext("/api/events", app::events);
+        server.createContext("/api/diagnostics", app::diagnostics);
+        server.createContext("/api/benchmark", app::benchmark);
+        server.createContext("/api/advice", app::advice);
         server.createContext("/api/lookup", app::lookup);
         server.createContext("/api/reset", app::reset);
         server.createContext("/api/repair", app::repair);
         server.createContext("/api/join", app::join);
         server.createContext("/api/leave", app::leave);
+        server.createContext("/api/crash", app::crash);
         server.createContext("/api/put", app::put);
         server.createContext("/", app::staticAsset);
         server.setExecutor(Executors.newFixedThreadPool(8));
@@ -55,6 +59,27 @@ public final class RingForgeServer {
         }
         int limit = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("limit", "100"));
         sendJson(exchange, 200, JsonWriter.events(ring.latestEvents(limit)));
+    }
+
+    private synchronized void diagnostics(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        sendJson(exchange, 200, JsonWriter.diagnostics(ring.diagnostics()));
+    }
+
+    private synchronized void benchmark(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        sendJson(exchange, 200, JsonWriter.benchmark(ring.benchmark()));
+    }
+
+    private synchronized void advice(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        sendJson(exchange, 200, JsonWriter.opsAdvice(ring.opsAdvice()));
     }
 
     private synchronized void lookup(HttpExchange exchange) throws IOException {
@@ -109,6 +134,21 @@ public final class RingForgeServer {
             boolean removed = ring.leave(node).isPresent();
             sendJson(exchange, removed ? 200 : 404,
                     removed ? JsonWriter.action("ok", "Node " + ring.identifierRing().normalize(node) + " left.")
+                            : JsonWriter.error("Node not found: " + node));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 400, JsonWriter.error(error.getMessage()));
+        }
+    }
+
+    private synchronized void crash(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            int node = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("node", "65"));
+            boolean removed = ring.crash(node).isPresent();
+            sendJson(exchange, removed ? 200 : 404,
+                    removed ? JsonWriter.action("ok", "Node " + ring.identifierRing().normalize(node) + " crashed.")
                             : JsonWriter.error("Node not found: " + node));
         } catch (RuntimeException error) {
             sendJson(exchange, 400, JsonWriter.error(error.getMessage()));

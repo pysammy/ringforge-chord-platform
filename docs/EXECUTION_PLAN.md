@@ -170,6 +170,8 @@ Deliverable:
 
 Goal: prevent data loss when a node fails.
 
+Status: local simulation complete.
+
 Approach:
 
 - store each key on the responsible node
@@ -188,9 +190,19 @@ Deliverable:
 
 - fault-tolerant replicated key-value behavior
 
+Current implementation:
+
+- replication factor 3
+- primary key placement on responsible node
+- successor replica placement
+- replica rebuild after put, delete, join, leave, and repair
+- replica promotion after simulated crash
+
 ## Phase 7: Failure Detection And Recovery
 
 Goal: handle nodes that crash without calling `leave()`.
+
+Status: crash simulation complete; heartbeat detection is future multi-process work.
 
 Tasks:
 
@@ -204,9 +216,17 @@ Deliverable:
 
 - self-healing local cluster under basic failures
 
+Current implementation:
+
+- `POST /api/crash?node={id}` removes a node without graceful handoff
+- promoted replicas preserve crashed-node primary keys when replicas exist
+- failed node history appears in diagnostics and ops advice
+
 ## Phase 8: Observability
 
 Goal: make the system debuggable like real infrastructure.
+
+Status: local API and UI observability in progress.
 
 Metrics:
 
@@ -232,9 +252,19 @@ Deliverable:
 
 - metrics and logs suitable for local analysis
 
+Current implementation:
+
+- structured event log
+- diagnostics endpoint
+- ops advice endpoint
+- browser timeline
+- lookup benchmark summary
+
 ## Phase 9: Simulation And Benchmarking
 
 Goal: analyze behavior under scale and churn.
+
+Status: first benchmark path complete.
 
 Scenarios:
 
@@ -258,9 +288,16 @@ Deliverable:
 
 - repeatable benchmark reports
 
+Current implementation:
+
+- benchmark runs lookups from every active node to every primary key
+- reports lookup count, node count, key count, average hops, max hops, and health
+
 ## Phase 10: LLM-Assisted Operations
 
 Goal: use LLMs in a practical, backend-relevant way without making them part of the core correctness path.
+
+Status: deterministic ops-advice layer complete; external LLM integration is future work.
 
 Possible features:
 

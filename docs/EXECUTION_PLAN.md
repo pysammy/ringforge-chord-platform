@@ -1,6 +1,6 @@
 # Execution Plan
 
-This document defines the step-by-step execution plan for converting the existing C++ Chord project into a stronger Java backend/infrastructure project.
+This document defines the step-by-step execution plan for building RingForge into a strong Java backend and infrastructure project.
 
 ## Phase 0: Project Foundation
 
@@ -14,15 +14,15 @@ Tasks:
 2. Add Maven project metadata.
 3. Add documentation for architecture, milestones, and LLM usage.
 4. Initialize a nested Git repository for independent commits.
-5. Keep the original C++ project untouched as the reference implementation.
+5. Keep the implementation independent and focused on RingForge's own architecture.
 
 Deliverable:
 
 - documented Java project scaffold
 
-## Phase 1: Direct Java Port
+## Phase 1: Core Java Simulation
 
-Goal: reproduce the current C++ behavior in Java.
+Goal: implement the core Chord behavior in Java with clean domain objects and testable results.
 
 Status: in progress.
 
@@ -37,7 +37,7 @@ Core classes:
 
 Features:
 
-- 8-bit identifier space initially, matching the C++ implementation
+- 8-bit identifier space initially for deterministic local scenarios
 - node join
 - node leave
 - insert key
@@ -48,13 +48,13 @@ Features:
 
 Success criteria:
 
-- Java demo produces the same key ownership behavior as the C++ version.
+- Java demo produces deterministic key ownership behavior.
 - Each key maps to the expected responsible node.
 - Node `100` joining migrates keys `99` and `100`.
 - Node `65` leaving migrates its keys to node `100`.
 - No active finger table points to node `65` after it leaves.
 
-Current additions beyond the C++ version:
+Current capabilities:
 
 - structured lookup results
 - invariant checker
@@ -64,6 +64,8 @@ Current additions beyond the C++ version:
 ## Phase 2: Correctness And Test Harness
 
 Goal: make the project testable and trustworthy.
+
+Status: in progress.
 
 Tasks:
 
@@ -82,6 +84,12 @@ Tasks:
 Deliverable:
 
 - reliable Java Chord simulation with automated tests
+
+Current additions:
+
+- invariant checker for active links, finger tables, and key ownership
+- structured event log that can later be backed by Kafka or another event stream
+- browser timeline for explaining cluster changes
 
 ## Phase 3: Library/Demo Separation
 

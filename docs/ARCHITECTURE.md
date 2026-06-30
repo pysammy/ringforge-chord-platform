@@ -139,8 +139,6 @@ LLMs must not decide correctness-critical behavior.
 
 ### Avoid Raw Object Coupling Long-Term
 
-The original C++ project uses direct `Node*` references.
-
 The Java simulation can begin with object references, but the architecture should move toward:
 
 ```text
@@ -188,7 +186,7 @@ One JVM process contains all nodes.
 
 Useful for:
 
-- porting algorithm
+- fast algorithm iteration
 - fast tests
 - deterministic debugging
 
@@ -238,9 +236,7 @@ Mitigation:
 
 ### Ambiguous Missing Values
 
-The C++ version uses `0` as `None`.
-
-Java should use:
+Missing values and explicit stored values must remain distinct. Java should use:
 
 ```text
 Optional<Value>

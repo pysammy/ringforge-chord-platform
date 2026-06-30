@@ -3,8 +3,10 @@ package com.ringforge.chord.simulation;
 import com.ringforge.chord.core.ChordNode;
 import com.ringforge.chord.core.FingerEntry;
 import com.ringforge.chord.core.LookupResult;
+import com.ringforge.chord.events.EventType;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,5 +71,24 @@ class ChordRingScenarioTest {
         ring.join(30);
 
         assertThrows(IllegalArgumentException.class, () -> ring.join(30));
+    }
+
+    @Test
+    void ringOperationsProduceStructuredEvents() {
+        ChordRing ring = SampleScenario.build();
+
+        ring.lookup(0, 99);
+        ring.leave(65);
+
+        List<EventType> eventTypes = ring.events().stream()
+                .map(event -> event.type())
+                .collect(java.util.stream.Collectors.toList());
+
+        assertTrue(eventTypes.contains(EventType.RING_CREATED));
+        assertTrue(eventTypes.contains(EventType.NODE_JOINED));
+        assertTrue(eventTypes.contains(EventType.KEY_STORED));
+        assertTrue(eventTypes.contains(EventType.KEY_MIGRATED));
+        assertTrue(eventTypes.contains(EventType.LOOKUP_COMPLETED));
+        assertTrue(eventTypes.contains(EventType.NODE_LEFT));
     }
 }

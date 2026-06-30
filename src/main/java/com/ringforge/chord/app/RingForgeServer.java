@@ -29,6 +29,7 @@ public final class RingForgeServer {
         RingForgeServer app = new RingForgeServer();
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/snapshot", app::snapshot);
+        server.createContext("/api/events", app::events);
         server.createContext("/api/lookup", app::lookup);
         server.createContext("/api/reset", app::reset);
         server.createContext("/api/repair", app::repair);
@@ -46,6 +47,14 @@ public final class RingForgeServer {
             return;
         }
         sendJson(exchange, 200, JsonWriter.snapshot(ring));
+    }
+
+    private synchronized void events(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        int limit = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("limit", "100"));
+        sendJson(exchange, 200, JsonWriter.events(ring.latestEvents(limit)));
     }
 
     private synchronized void lookup(HttpExchange exchange) throws IOException {

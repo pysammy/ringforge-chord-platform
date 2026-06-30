@@ -3,6 +3,7 @@ package com.ringforge.chord.api;
 import com.ringforge.chord.core.ChordNode;
 import com.ringforge.chord.core.FingerEntry;
 import com.ringforge.chord.core.LookupResult;
+import com.ringforge.chord.events.RingEvent;
 import com.ringforge.chord.simulation.ChordRing;
 import com.ringforge.chord.simulation.HealthFinding;
 import com.ringforge.chord.simulation.HealthReport;
@@ -48,6 +49,8 @@ public final class JsonWriter {
         }
         json.append("],");
         health(json, health);
+        json.append(',');
+        events(json, "events", ring.latestEvents(80));
         json.append('}');
         return json.toString();
     }
@@ -72,6 +75,14 @@ public final class JsonWriter {
         json.append('{');
         field(json, "status", status).append(',');
         field(json, "message", message);
+        json.append('}');
+        return json.toString();
+    }
+
+    public static String events(List<RingEvent> events) {
+        StringBuilder json = new StringBuilder();
+        json.append('{');
+        events(json, "events", events);
         json.append('}');
         return json.toString();
     }
@@ -131,6 +142,34 @@ public final class JsonWriter {
             json.append('}');
         }
         json.append("]}");
+    }
+
+    private static void events(StringBuilder json, String name, List<RingEvent> events) {
+        json.append('"').append(escape(name)).append("\":[");
+        for (int i = 0; i < events.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            event(json, events.get(i));
+        }
+        json.append(']');
+    }
+
+    private static void event(StringBuilder json, RingEvent event) {
+        json.append('{');
+        json.append("\"sequence\":").append(event.sequence()).append(',');
+        field(json, "timestamp", event.timestamp().toString()).append(',');
+        field(json, "type", event.type().name()).append(',');
+        field(json, "message", event.message()).append(',');
+        json.append("\"details\":{");
+        int index = 0;
+        for (Map.Entry<String, String> entry : event.details().entrySet()) {
+            if (index++ > 0) {
+                json.append(',');
+            }
+            field(json, entry.getKey(), entry.getValue());
+        }
+        json.append("}}");
     }
 
     private static void intArray(StringBuilder json, String name, List<Integer> values) {

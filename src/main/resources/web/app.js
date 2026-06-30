@@ -44,6 +44,7 @@ function renderSnapshot() {
 
   renderHealth(snapshot);
   renderDistribution(snapshot);
+  renderEvents(snapshot);
   drawRing(snapshot, state.lookup);
 }
 
@@ -82,6 +83,55 @@ function renderDistribution(snapshot) {
     row.append(title, keys);
     distribution.appendChild(row);
   });
+}
+
+function renderEvents(snapshot) {
+  const timeline = document.getElementById("eventTimeline");
+  timeline.innerHTML = "";
+  const events = [...(snapshot.events || [])].reverse().slice(0, 18);
+  if (!events.length) {
+    const row = document.createElement("div");
+    row.className = "event-row";
+    row.textContent = "No events recorded yet.";
+    timeline.appendChild(row);
+    return;
+  }
+
+  events.forEach((event) => {
+    const row = document.createElement("div");
+    row.className = "event-row";
+
+    const seq = document.createElement("div");
+    seq.className = "event-seq";
+    seq.textContent = `#${event.sequence}`;
+
+    const body = document.createElement("div");
+    body.className = "event-body";
+
+    const type = document.createElement("span");
+    type.className = `event-type ${event.type.toLowerCase()}`;
+    type.textContent = event.type.replaceAll("_", " ");
+
+    const message = document.createElement("div");
+    message.className = "event-message";
+    message.textContent = event.message;
+
+    const details = document.createElement("div");
+    details.className = "event-details";
+    details.textContent = formatEventDetails(event);
+
+    body.append(type, message, details);
+    row.append(seq, body);
+    timeline.appendChild(row);
+  });
+}
+
+function formatEventDetails(event) {
+  const detailText = Object.entries(event.details || {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" · ");
+  const time = new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return detailText ? `${time} · ${detailText}` : time;
 }
 
 function renderLookup(result) {

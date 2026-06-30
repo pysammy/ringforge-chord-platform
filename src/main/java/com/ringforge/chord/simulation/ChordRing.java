@@ -4,6 +4,9 @@ import com.ringforge.chord.core.ChordNode;
 import com.ringforge.chord.core.FingerEntry;
 import com.ringforge.chord.core.IdentifierRing;
 import com.ringforge.chord.core.LookupResult;
+import com.ringforge.chord.events.EventLog;
+import com.ringforge.chord.events.EventType;
+import com.ringforge.chord.events.RingEvent;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,9 +22,12 @@ import java.util.TreeMap;
 public final class ChordRing {
     private final IdentifierRing identifierRing;
     private final NavigableMap<Integer, ChordNode> nodes = new TreeMap<>();
+    private final EventLog eventLog = new EventLog();
 
     public ChordRing(int bitLength) {
         this.identifierRing = new IdentifierRing(bitLength);
+        eventLog.record(EventType.RING_CREATED, "Ring created with " + identifierRing.size() + " slots.",
+                EventLog.details("bitLength", String.valueOf(bitLength), "ringSize", String.valueOf(identifierRing.size())));
     }
 
     public IdentifierRing identifierRing() {
@@ -36,6 +42,8 @@ public final class ChordRing {
         ChordNode node = new ChordNode(nodeId);
         nodes.put(nodeId, node);
         rebuildTopology();
+        eventLog.record(EventType.NODE_JOINED, "Node " + nodeId + " joined the ring.",
+                EventLog.details("nodeId", String.valueOf(nodeId), "activeNodeCount", String.valueOf(nodes.size())));
         rebalanceKeys();
         return node;
     }
@@ -48,8 +56,15 @@ public final class ChordRing {
         }
         Map<Integer, String> movedKeys = leaving.store().drain();
         rebuildTopology();
+        eventLog.record(EventType.NODE_LEFT, "Node " + nodeId + " left the ring.",
+                EventLog.details("nodeId", String.valueOf(nodeId), "movedKeyCount", String.valueOf(movedKeys.size()),
+                        "activeNodeCount", String.valueOf(nodes.size())));
         for (Map.Entry<Integer, String> entry : movedKeys.entrySet()) {
-            put(entry.getKey(), entry.getValue());
+            ChordNode target = internalPut(entry.getKey(), entry.getValue());
+            eventLog.record(EventType.KEY_MIGRATED, "Key " + entry.getKey() + " moved from node " + nodeId
+                            + " to node " + target.id() + ".",
+                    EventLog.details("key", String.valueOf(entry.getKey()), "fromNodeId", String.valueOf(nodeId),
+                            "toNodeId", String.valueOf(target.id()), "reason", "node-left"));
         }
         rebalanceKeys();
         return Optional.of(leaving);
@@ -58,13 +73,21 @@ public final class ChordRing {
     public void put(int rawKey, String value) {
         ensureNotEmpty();
         int key = identifierRing.normalize(rawKey);
-        findSuccessor(key).store().put(key, value);
+        ChordNode owner = internalPut(key, value);
+        eventLog.record(EventType.KEY_STORED, "Key " + key + " stored on node " + owner.id() + ".",
+                EventLog.details("key", String.valueOf(key), "nodeId", String.valueOf(owner.id())));
     }
 
     public Optional<String> delete(int rawKey) {
         ensureNotEmpty();
         int key = identifierRing.normalize(rawKey);
-        return findSuccessor(key).store().delete(key);
+        ChordNode owner = findSuccessor(key);
+        Optional<String> deleted = owner.store().delete(key);
+        if (deleted.isPresent()) {
+            eventLog.record(EventType.KEY_DELETED, "Key " + key + " deleted from node " + owner.id() + ".",
+                    EventLog.details("key", String.valueOf(key), "nodeId", String.valueOf(owner.id())));
+        }
+        return deleted;
     }
 
     public LookupResult lookup(int rawStartNodeId, int rawKey) {
@@ -85,7 +108,9 @@ public final class ChordRing {
             path.add(current.id());
             if (current.isResponsibleFor(key, identifierRing)) {
                 Optional<String> value = current.store().get(key);
-                return new LookupResult(key, value, startNodeId, current.id(), path, System.nanoTime() - startedAt);
+                LookupResult result = new LookupResult(key, value, startNodeId, current.id(), path, System.nanoTime() - startedAt);
+                recordLookup(result);
+                return result;
             }
 
             if (!visited.add(current.id())) {
@@ -104,7 +129,9 @@ public final class ChordRing {
             path.add(responsible.id());
         }
         Optional<String> value = responsible.store().get(key);
-        return new LookupResult(key, value, startNodeId, responsible.id(), path, System.nanoTime() - startedAt);
+        LookupResult result = new LookupResult(key, value, startNodeId, responsible.id(), path, System.nanoTime() - startedAt);
+        recordLookup(result);
+        return result;
     }
 
     public ChordNode findSuccessor(int rawId) {
@@ -134,9 +161,21 @@ public final class ChordRing {
         return new InvariantChecker(this).check();
     }
 
+    public List<RingEvent> events() {
+        return eventLog.snapshot();
+    }
+
+    public List<RingEvent> latestEvents(int limit) {
+        return eventLog.latest(limit);
+    }
+
     public void repair() {
         rebuildTopology();
         rebalanceKeys();
+        HealthReport healthReport = healthReport();
+        eventLog.record(EventType.RING_REPAIRED, "Ring repair completed.",
+                EventLog.details("healthy", String.valueOf(healthReport.healthy()),
+                        "findingCount", String.valueOf(healthReport.findings().size())));
     }
 
     private void rebuildTopology() {
@@ -173,18 +212,54 @@ public final class ChordRing {
             return;
         }
 
-        Map<Integer, String> allKeys = new TreeMap<>();
+        List<OwnedValue> allKeys = new ArrayList<>();
         for (ChordNode node : nodes.values()) {
-            allKeys.putAll(node.store().drain());
+            int oldOwnerId = node.id();
+            for (Map.Entry<Integer, String> entry : node.store().drain().entrySet()) {
+                allKeys.add(new OwnedValue(entry.getKey(), entry.getValue(), oldOwnerId));
+            }
         }
-        for (Map.Entry<Integer, String> entry : allKeys.entrySet()) {
-            put(entry.getKey(), entry.getValue());
+        for (OwnedValue value : allKeys) {
+            ChordNode newOwner = internalPut(value.key, value.value);
+            if (newOwner.id() != value.ownerId) {
+                eventLog.record(EventType.KEY_MIGRATED, "Key " + value.key + " moved from node "
+                                + value.ownerId + " to node " + newOwner.id() + ".",
+                        EventLog.details("key", String.valueOf(value.key), "fromNodeId", String.valueOf(value.ownerId),
+                                "toNodeId", String.valueOf(newOwner.id()), "reason", "ownership-rebalance"));
+            }
         }
+    }
+
+    private ChordNode internalPut(int rawKey, String value) {
+        int key = identifierRing.normalize(rawKey);
+        ChordNode owner = findSuccessor(key);
+        owner.store().put(key, value);
+        return owner;
+    }
+
+    private void recordLookup(LookupResult result) {
+        eventLog.record(EventType.LOOKUP_COMPLETED, "Lookup for key " + result.key() + " resolved at node "
+                        + result.responsibleNodeId() + ".",
+                EventLog.details("key", String.valueOf(result.key()), "startNodeId", String.valueOf(result.startNodeId()),
+                        "responsibleNodeId", String.valueOf(result.responsibleNodeId()), "found", String.valueOf(result.found()),
+                        "hopCount", String.valueOf(result.hopCount()), "path", result.path().toString()));
     }
 
     private void ensureNotEmpty() {
         if (nodes.isEmpty()) {
             throw new IllegalStateException("Ring has no active nodes");
+        }
+    }
+
+    private static final class OwnedValue {
+        private final int key;
+        private final String value;
+        private final int ownerId;
+
+        private OwnedValue(int key, String value, int ownerId) {
+            this.key = key;
+            this.value = value;
+            this.ownerId = ownerId;
         }
     }
 }

@@ -191,13 +191,15 @@ h2 {
 }
 
 .health-list,
-.distribution {
+.distribution,
+.event-timeline {
   display: grid;
   gap: 8px;
 }
 
 .finding,
-.node-row {
+.node-row,
+.event-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -207,7 +209,8 @@ h2 {
 }
 
 .finding:first-child,
-.node-row:first-child {
+.node-row:first-child,
+.event-row:first-child {
   border-top: 0;
 }
 
@@ -222,6 +225,57 @@ h2 {
 .keys {
   color: var(--muted);
   text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.event-row {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.event-seq {
+  flex: 0 0 auto;
+  min-width: 42px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-body {
+  min-width: 0;
+}
+
+.event-type {
+  display: inline-flex;
+  margin-bottom: 3px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  color: #fff;
+  background: var(--teal);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.event-type.lookup_completed {
+  background: var(--blue);
+}
+
+.event-type.key_migrated {
+  background: var(--amber);
+}
+
+.event-type.node_left {
+  background: var(--red);
+}
+
+.event-message {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.event-details {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 

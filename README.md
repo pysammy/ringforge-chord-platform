@@ -1,12 +1,12 @@
 # RingForge: Java Chord DHT Platform
 
-RingForge is the planned Java rewrite and expansion of the existing C++ Chord implementation. The goal is not only to port the algorithm, but to grow it into a backend and infrastructure-heavy distributed key-value platform based on Chord-style routing.
+RingForge is a Java distributed key-placement and routing diagnostics platform based on Chord-style consistent hashing. The project focuses on a practical infrastructure problem: helping engineers understand where data belongs, how lookups are routed, and whether a cluster remains healthy while nodes join, leave, or fail.
 
-The first milestone will preserve the original educational behavior: an in-memory Chord ring, node joins, node leaves, finger tables, key insertion, lookup, and key migration. Later milestones will turn the simulation into a real multi-process service with networking, replication, failure detection, observability, and automated correctness testing.
+The first milestone provides an in-memory Chord ring with node joins, node leaves, finger tables, key insertion, lookup, key migration, health checks, a local API, and an engineer-facing browser console. Later milestones will evolve the system into a real multi-process service with networking, replication, failure detection, observability, and automated correctness testing.
 
 ## Why This Project Exists
 
-The current C++ project demonstrates the Chord Distributed Hash Table algorithm in one process. That is useful for learning, but backend and infrastructure systems usually require more:
+Distributed key-value systems need more than a hash function. Engineers need to reason about ownership, routing, repair, and failure behavior:
 
 - nodes that communicate over the network
 - APIs for storing and retrieving data
@@ -79,7 +79,7 @@ ringforge-chord-platform/
 
 This project will be built in phases:
 
-1. Port the C++ simulation to clean Java domain objects.
+1. Implement the Chord simulation as clean Java domain objects.
 2. Add automated tests for ring correctness.
 3. Separate algorithm code from demo code.
 4. Add an API layer.
@@ -111,6 +111,7 @@ Implemented so far:
 - key insertion and lookup
 - key migration on join and leave
 - invariant-based health checks
+- structured event log for joins, leaves, lookups, key storage, key deletion, migrations, and repairs
 - local HTTP API
 - browser-based RingForge Console
 - JUnit tests for range handling, lookup behavior, migration, and stale finger-table prevention
@@ -154,6 +155,7 @@ Useful API endpoints:
 
 ```text
 GET  /api/snapshot
+GET  /api/events?limit=100
 GET  /api/lookup?start=0&key=99
 POST /api/leave?node=65
 POST /api/join?node=65

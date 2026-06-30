@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +40,29 @@ public final class ServiceChordClient {
             return Optional.empty();
         }
         return Optional.ofNullable(extractJsonString(response, "value"));
+    }
+
+    public List<NodeEndpoint> addMember(NodeEndpoint endpoint) {
+        String response = request("POST", "/node/join?nodeId=" + endpoint.nodeId()
+                + "&uri=" + encode(endpoint.baseUri().toString()));
+        return parseMembers(response);
+    }
+
+    public void refreshMembers(List<NodeEndpoint> members) {
+        request("POST", "/node/members?members=" + encodeMembers(members));
+    }
+
+    public List<NodeEndpoint> members() {
+        return parseMembers(request("GET", "/node/members"));
+    }
+
+    public void stabilize() {
+        request("POST", "/node/stabilize");
+    }
+
+    public void notify(NodeEndpoint endpoint) {
+        request("POST", "/node/notify?nodeId=" + endpoint.nodeId()
+                + "&uri=" + encode(endpoint.baseUri().toString()));
     }
 
     private String request(String method, String path) {
@@ -75,6 +99,43 @@ public final class ServiceChordClient {
         int responsibleNodeId = extractJsonInt(json, "responsibleNodeId");
         List<Integer> path = extractJsonIntArray(json, "path");
         return new ServiceLookupResult(key, found, value, responsibleNodeId, path);
+    }
+
+    static List<NodeEndpoint> parseMembers(String json) {
+        List<NodeEndpoint> members = new ArrayList<>();
+        int position = 0;
+        while (true) {
+            int nodeIdField = json.indexOf("\"nodeId\":", position);
+            if (nodeIdField < 0) {
+                break;
+            }
+            int nodeIdStart = nodeIdField + "\"nodeId\":".length();
+            int nodeIdEnd = nodeIdStart;
+            while (nodeIdEnd < json.length() && Character.isDigit(json.charAt(nodeIdEnd))) {
+                nodeIdEnd++;
+            }
+            int nodeId = Integer.parseInt(json.substring(nodeIdStart, nodeIdEnd));
+            int uriField = json.indexOf("\"uri\":", nodeIdEnd);
+            String uri = extractJsonString(json.substring(uriField), "uri");
+            members.add(new NodeEndpoint(nodeId, URI.create(uri)));
+            position = uriField + 1;
+        }
+        members.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        return members;
+    }
+
+    static String encodeMembers(List<NodeEndpoint> members) {
+        List<NodeEndpoint> ordered = new ArrayList<>(members);
+        ordered.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        StringBuilder value = new StringBuilder();
+        for (int i = 0; i < ordered.size(); i++) {
+            if (i > 0) {
+                value.append(';');
+            }
+            NodeEndpoint member = ordered.get(i);
+            value.append(member.nodeId()).append('=').append(member.baseUri());
+        }
+        return encode(value.toString());
     }
 
     private static String encodePath(List<Integer> path) {

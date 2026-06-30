@@ -146,7 +146,7 @@ Deliverable:
 
 Goal: make nodes communicate like real distributed services.
 
-Status: storage transport and first node-to-node routing foundation complete; dynamic membership remains future work.
+Status: storage transport, node-to-node routing, and deterministic bootstrap join complete; heartbeat-driven membership remains future work.
 
 Example local usage:
 
@@ -177,11 +177,14 @@ Current implementation:
 - node-to-node lookup forwarding
 - routed key writes over HTTP
 - service tests verifying forwarded paths and finger shortcuts
+- bootstrap join via an existing service node
+- membership propagation across service nodes
+- deterministic stabilize and notify endpoints
+- key rebalancing after service-node membership changes
 
 Remaining work:
 
 - add membership gossip or a control-plane bootstrap service
-- add dynamic join/stabilization endpoints
 - add heartbeat-based failure detection
 - add process supervision scripts
 

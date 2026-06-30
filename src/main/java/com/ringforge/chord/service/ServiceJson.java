@@ -58,6 +58,23 @@ final class ServiceJson {
         return json.toString();
     }
 
+    static String members(List<NodeEndpoint> members) {
+        StringBuilder json = new StringBuilder();
+        json.append("{\"members\":[");
+        for (int i = 0; i < members.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            NodeEndpoint member = members.get(i);
+            json.append('{');
+            json.append("\"nodeId\":").append(member.nodeId()).append(',');
+            json.append("\"uri\":\"").append(escape(member.baseUri().toString())).append("\"");
+            json.append('}');
+        }
+        json.append("]}");
+        return json.toString();
+    }
+
     static String valueResponse(boolean found, String value) {
         if (!found) {
             return "{\"found\":false,\"value\":null}";

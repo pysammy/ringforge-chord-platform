@@ -60,6 +60,46 @@ public final class ServiceChordNode {
     }
 
     public void configureCluster(List<NodeEndpoint> members) {
+        configureCluster(members, true);
+    }
+
+    public void joinVia(NodeEndpoint selfEndpoint, NodeEndpoint bootstrapEndpoint) {
+        List<NodeEndpoint> members = new ServiceChordClient(bootstrapEndpoint.baseUri()).addMember(selfEndpoint);
+        configureCluster(members, false);
+        propagateMembership(members);
+    }
+
+    public List<NodeEndpoint> members() {
+        List<NodeEndpoint> members = new ArrayList<>(endpoints.values());
+        members.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        return Collections.unmodifiableList(members);
+    }
+
+    public List<NodeEndpoint> addMember(NodeEndpoint endpoint) {
+        List<NodeEndpoint> members = new ArrayList<>(endpoints.values());
+        members.removeIf(member -> member.nodeId() == endpoint.nodeId());
+        members.add(endpoint);
+        configureCluster(members, false);
+        return members();
+    }
+
+    public void replaceMembers(List<NodeEndpoint> members) {
+        configureCluster(members, true);
+    }
+
+    public void stabilize() {
+        configureCluster(members(), true);
+    }
+
+    public void notify(NodeEndpoint endpoint) {
+        List<NodeEndpoint> members = new ArrayList<>(endpoints.values());
+        if (members.stream().noneMatch(member -> member.nodeId() == endpoint.nodeId())) {
+            members.add(endpoint);
+            configureCluster(members, true);
+        }
+    }
+
+    private void configureCluster(List<NodeEndpoint> members, boolean rebalanceLocalKeys) {
         if (members.stream().noneMatch(member -> member.nodeId() == nodeId)) {
             throw new IllegalArgumentException("Member list does not contain this node: " + nodeId);
         }
@@ -90,6 +130,10 @@ public final class ServiceChordNode {
             entries.add(new FingerEntry(finger, start, end, new ChordNode(successor)));
         }
         fingerTable.replaceAll(entries);
+
+        if (rebalanceLocalKeys) {
+            rebalanceLocalKeys();
+        }
     }
 
     public void put(int rawKey, String value, List<Integer> path) {
@@ -114,6 +158,25 @@ public final class ServiceChordNode {
 
     public Optional<String> getLocal(int rawKey) {
         return store.get(ring.normalize(rawKey));
+    }
+
+    private void propagateMembership(List<NodeEndpoint> members) {
+        for (NodeEndpoint member : members) {
+            new ServiceChordClient(member.baseUri()).refreshMembers(members);
+        }
+    }
+
+    private void rebalanceLocalKeys() {
+        Map<Integer, String> snapshot = store.snapshot();
+        for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
+            int key = ring.normalize(entry.getKey());
+            if (!isResponsibleFor(key)) {
+                Optional<String> moved = store.delete(key);
+                if (moved.isPresent()) {
+                    put(key, moved.get(), Collections.emptyList());
+                }
+            }
+        }
     }
 
     private boolean isResponsibleFor(int key) {

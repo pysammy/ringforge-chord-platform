@@ -27,6 +27,13 @@ public final class ServiceChordNodeServer implements AutoCloseable {
     public static ServiceChordNodeServer start(ServiceChordNode node, int port) throws IOException {
         ServiceChordNodeServer nodeServer = new ServiceChordNodeServer(node, HttpServer.create(new InetSocketAddress(port), 0));
         nodeServer.server.createContext("/node/state", nodeServer::state);
+        nodeServer.server.createContext("/node/members", nodeServer::members);
+        nodeServer.server.createContext("/node/join", nodeServer::join);
+        nodeServer.server.createContext("/node/stabilize", nodeServer::stabilize);
+        nodeServer.server.createContext("/node/notify", nodeServer::notify);
+        nodeServer.server.createContext("/node/successor", nodeServer::successor);
+        nodeServer.server.createContext("/node/predecessor", nodeServer::predecessor);
+        nodeServer.server.createContext("/node/finger-table", nodeServer::fingerTable);
         nodeServer.server.createContext("/lookup", nodeServer::lookup);
         nodeServer.server.createContext("/keys/put", nodeServer::put);
         nodeServer.server.createContext("/keys/local", nodeServer::local);
@@ -50,6 +57,86 @@ public final class ServiceChordNodeServer implements AutoCloseable {
     }
 
     private void state(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        sendJson(exchange, 200, ServiceJson.state(node));
+    }
+
+    private void members(HttpExchange exchange) throws IOException {
+        if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendJson(exchange, 200, ServiceJson.members(node.members()));
+            return;
+        }
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            String encodedMembers = query(exchange.getRequestURI()).getOrDefault("members", "");
+            node.replaceMembers(parseMembers(encodedMembers));
+            sendJson(exchange, 200, ServiceJson.members(node.members()));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void join(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            Map<String, String> query = query(exchange.getRequestURI());
+            int nodeId = Integer.parseInt(query.getOrDefault("nodeId", "0"));
+            String uri = query.getOrDefault("uri", "");
+            List<NodeEndpoint> members = node.addMember(new NodeEndpoint(nodeId, java.net.URI.create(uri)));
+            sendJson(exchange, 200, ServiceJson.members(members));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void stabilize(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            node.stabilize();
+            sendJson(exchange, 200, ServiceJson.state(node));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void notify(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            Map<String, String> query = query(exchange.getRequestURI());
+            int nodeId = Integer.parseInt(query.getOrDefault("nodeId", "0"));
+            String uri = query.getOrDefault("uri", "");
+            node.notify(new NodeEndpoint(nodeId, java.net.URI.create(uri)));
+            sendJson(exchange, 200, ServiceJson.state(node));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void successor(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        sendJson(exchange, 200, "{\"successor\":" + node.successorId() + "}");
+    }
+
+    private void predecessor(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        sendJson(exchange, 200, "{\"predecessor\":" + node.predecessorId() + "}");
+    }
+
+    private void fingerTable(HttpExchange exchange) throws IOException {
         if (!requireMethod(exchange, "GET")) {
             return;
         }
@@ -119,6 +206,26 @@ public final class ServiceChordNodeServer implements AutoCloseable {
             }
         }
         return path;
+    }
+
+    private static List<NodeEndpoint> parseMembers(String value) {
+        List<NodeEndpoint> members = new ArrayList<>();
+        if (value == null || value.trim().isEmpty()) {
+            return members;
+        }
+        for (String part : value.split(";")) {
+            if (part.trim().isEmpty()) {
+                continue;
+            }
+            int equals = part.indexOf('=');
+            if (equals < 0) {
+                throw new IllegalArgumentException("Invalid member entry: " + part);
+            }
+            int nodeId = Integer.parseInt(part.substring(0, equals));
+            String uri = part.substring(equals + 1);
+            members.add(new NodeEndpoint(nodeId, java.net.URI.create(uri)));
+        }
+        return members;
     }
 
     private static Map<String, String> query(URI uri) {

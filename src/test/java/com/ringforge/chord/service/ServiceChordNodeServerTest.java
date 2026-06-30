@@ -86,6 +86,45 @@ class ServiceChordNodeServerTest {
         }
     }
 
+    @Test
+    void serviceNodeCanJoinThroughBootstrapAndTakeOverKeyRange() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+        ServiceChordNode node110 = new ServiceChordNode(110, 8);
+        ServiceChordNode node100 = new ServiceChordNode(100, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0);
+             ServiceChordNodeServer server110 = ServiceChordNodeServer.start(node110, 0);
+             ServiceChordNodeServer server100 = ServiceChordNodeServer.start(node100, 0)) {
+
+            List<NodeEndpoint> initialMembers = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(65, server65.port()),
+                    endpoint(110, server110.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node65, node110)) {
+                node.configureCluster(initialMembers);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client100 = new ServiceChordClient(endpoint(100, server100.port()).baseUri());
+            ServiceChordClient client110 = new ServiceChordClient(endpoint(110, server110.port()).baseUri());
+
+            client0.put(99, "ninety-nine", Collections.emptyList());
+            assertEquals("ninety-nine", client110.getLocal(99).orElseThrow(AssertionError::new));
+
+            node100.joinVia(endpoint(100, server100.port()), endpoint(65, server65.port()));
+
+            ServiceLookupResult result = client0.lookup(99, Collections.emptyList());
+            assertTrue(result.found());
+            assertEquals("ninety-nine", result.value().orElseThrow(AssertionError::new));
+            assertEquals(100, result.responsibleNodeId());
+            assertEquals("ninety-nine", client100.getLocal(99).orElseThrow(AssertionError::new));
+            assertTrue(client110.getLocal(99).isEmpty());
+        }
+    }
+
     private static NodeEndpoint endpoint(int nodeId, int port) {
         return new NodeEndpoint(nodeId, URI.create("http://localhost:" + port));
     }

@@ -84,9 +84,36 @@ GET  /keys/local?key=...
 
 Current limitation:
 
-- each node is configured with a deterministic member list before routing starts
+- membership is deterministic and propagated through a bootstrap node
+- full gossip-style membership is not implemented yet
 
-This means the runtime now proves node-to-node forwarding, but does not yet implement dynamic membership.
+This means the runtime now proves node-to-node forwarding and bootstrap joins, but does not yet implement heartbeat-driven membership repair.
+
+## Bootstrap Join
+
+A new service node can join through a known bootstrap node:
+
+```text
+newNode.joinVia(selfEndpoint, bootstrapEndpoint)
+```
+
+The flow is:
+
+1. The joining node registers itself with the bootstrap node.
+2. The bootstrap node returns the updated member list.
+3. The joining node configures its predecessor, successor, and finger table.
+4. The member list is pushed to all known nodes.
+5. Each node rebalances local keys it no longer owns.
+
+The integration test verifies this behavior with key `99`:
+
+```text
+Initial ring: 0 -> 65 -> 110
+Key 99 belongs to node 110.
+Node 100 joins through node 65.
+Key 99 migrates from node 110 to node 100.
+Future lookups resolve to node 100.
+```
 
 ## What Is Not Done Yet
 
@@ -101,13 +128,20 @@ Those are the next pieces required for a true multi-process Chord cluster.
 ## Next Implementation Slice
 
 The next slice should introduce a `ChordNodeService` process with endpoints such as:
-The next slice should add dynamic membership and stabilization endpoints such as:
+The runtime now exposes deterministic membership and stabilization endpoints:
 
 ```text
 POST /node/join
 POST /node/notify
 POST /node/stabilize
+GET  /node/members
+POST /node/members
+GET  /node/successor
+GET  /node/predecessor
+GET  /node/finger-table
 ```
+
+The next slice should add heartbeat-based failure detection and repair for service nodes.
 
 The storage server and service-node runtime can then be combined into one independently deployable node process.
 

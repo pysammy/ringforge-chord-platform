@@ -146,6 +146,8 @@ Deliverable:
 
 Goal: make nodes communicate like real distributed services.
 
+Status: storage transport foundation complete; full node-to-node routing remains future work.
+
 Example local usage:
 
 ```bash
@@ -165,6 +167,19 @@ Tasks:
 Deliverable:
 
 - multiple Java processes forming a Chord ring locally
+
+Current implementation:
+
+- standalone HTTP node storage server
+- HTTP-backed `KeyValueStore`
+- tests proving Chord can place and look up keys through remote stores
+
+Remaining work:
+
+- move successor/predecessor/finger ownership into individual node processes
+- add node-to-node lookup forwarding
+- add membership gossip or a control-plane bootstrap service
+- add process supervision scripts
 
 ## Phase 6: Replication
 

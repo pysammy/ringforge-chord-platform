@@ -12,6 +12,8 @@ Current seam:
 
 - `KeyValueStore`
 - `InMemoryKeyValueStore`
+- `HttpKeyValueStore`
+- `NodeStorageServer`
 
 Future adapter:
 
@@ -58,6 +60,12 @@ Prerequisite:
 
 - multi-process node runtime
 - HTTP or gRPC node-to-node transport
+
+Current progress:
+
+- standalone HTTP storage node
+- HTTP storage client
+- integration tests for remote store behavior
 
 Future artifacts:
 

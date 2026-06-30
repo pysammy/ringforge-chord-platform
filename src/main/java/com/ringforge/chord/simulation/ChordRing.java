@@ -11,6 +11,7 @@ import com.ringforge.chord.events.EventType;
 import com.ringforge.chord.events.RingEvent;
 import com.ringforge.chord.metrics.BenchmarkReport;
 import com.ringforge.chord.ops.OpsAdvice;
+import com.ringforge.chord.storage.KeyValueStore;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,11 +57,15 @@ public final class ChordRing {
     }
 
     public ChordNode join(int rawNodeId) {
+        return join(rawNodeId, null);
+    }
+
+    public ChordNode join(int rawNodeId, KeyValueStore store) {
         int nodeId = identifierRing.normalize(rawNodeId);
         if (nodes.containsKey(nodeId)) {
             throw new IllegalArgumentException("Node already exists: " + nodeId);
         }
-        ChordNode node = new ChordNode(nodeId);
+        ChordNode node = store == null ? new ChordNode(nodeId) : new ChordNode(nodeId, store);
         nodes.put(nodeId, node);
         failedNodeIds.remove(nodeId);
         rebuildTopology();

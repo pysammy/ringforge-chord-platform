@@ -116,6 +116,8 @@ Implemented so far:
 - structured event log for joins, leaves, lookups, key storage, key deletion, migrations, and repairs
 - deterministic diagnostics and ops advice
 - benchmark endpoint for lookup-hop accuracy checks
+- HTTP-backed remote `KeyValueStore` client
+- standalone node storage server for multi-process storage experiments
 - local HTTP API
 - browser-based RingForge Console
 - JUnit tests for range handling, lookup behavior, migration, and stale finger-table prevention
@@ -172,6 +174,23 @@ POST /api/reset
 POST /api/put?key=77&value=manual
 ```
 
+Run a standalone storage node:
+
+```bash
+java -cp target/classes com.ringforge.chord.transport.NodeStorageServer 9001
+```
+
+Storage node endpoints:
+
+```text
+GET  /node/health
+POST /store/put?key=42&value=hello
+GET  /store/get?key=42
+GET  /store/snapshot
+POST /store/delete?key=42
+POST /store/drain
+```
+
 ## Current Reliability Behavior
 
 RingForge currently uses in-memory storage, but it already models reliability behavior that production systems care about:
@@ -186,5 +205,5 @@ External technologies should attach to those proven seams:
 
 - Redis can implement `KeyValueStore`.
 - Kafka can persist the structured event log.
-- Kubernetes can run multi-process nodes after the network transport phase.
+- Kubernetes can run multi-process nodes after the full node-to-node routing phase.
 - LLMs can summarize diagnostics, event logs, benchmarks, and repair recommendations.

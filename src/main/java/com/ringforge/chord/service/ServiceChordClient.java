@@ -65,6 +65,19 @@ public final class ServiceChordClient {
                 + "&uri=" + encode(endpoint.baseUri().toString()));
     }
 
+    public boolean isHealthy() {
+        try {
+            String response = request("GET", "/node/health");
+            return response.contains("\"status\":\"ok\"");
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
+    public List<NodeEndpoint> repairMembership() {
+        return parseMembers(request("POST", "/node/heartbeat-repair"));
+    }
+
     private String request(String method, String path) {
         try {
             HttpURLConnection connection = (HttpURLConnection) baseUri.resolve(path).toURL().openConnection();

@@ -134,6 +134,7 @@ The runtime now exposes deterministic membership and stabilization endpoints:
 POST /node/join
 POST /node/notify
 POST /node/stabilize
+POST /node/heartbeat-repair
 GET  /node/members
 POST /node/members
 GET  /node/successor
@@ -141,7 +142,39 @@ GET  /node/predecessor
 GET  /node/finger-table
 ```
 
-The next slice should add heartbeat-based failure detection and repair for service nodes.
+## Heartbeat Repair
+
+Service nodes now expose:
+
+```text
+POST /node/heartbeat-repair
+```
+
+The endpoint:
+
+1. Probes every known peer through `/node/health`.
+2. Removes unreachable peers from the member list.
+3. Recomputes predecessor, successor, and finger table entries.
+4. Propagates the repaired member list to surviving nodes.
+5. Rebalances local keys that no longer belong to the current node.
+
+The integration test verifies:
+
+```text
+Initial ring: 0 -> 30 -> 65
+Key 45 is stored on node 65.
+Lookup from node 0 routes [0, 30, 65].
+Node 30 stops.
+Node 0 runs heartbeat repair.
+Membership becomes 0 -> 65.
+Lookup from node 0 routes [0, 65].
+```
+
+Current limitation:
+
+- service-runtime replication is not implemented yet, so keys whose primary owner fails are not recovered in this phase
+
+The next slice should add service-runtime replication and replica promotion.
 
 The storage server and service-node runtime can then be combined into one independently deployable node process.
 

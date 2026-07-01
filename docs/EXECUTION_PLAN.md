@@ -146,7 +146,7 @@ Deliverable:
 
 Goal: make nodes communicate like real distributed services.
 
-Status: storage transport, node-to-node routing, and deterministic bootstrap join complete; heartbeat-driven membership remains future work.
+Status: storage transport, node-to-node routing, deterministic bootstrap join, and explicit heartbeat repair complete.
 
 Example local usage:
 
@@ -181,11 +181,14 @@ Current implementation:
 - membership propagation across service nodes
 - deterministic stabilize and notify endpoints
 - key rebalancing after service-node membership changes
+- heartbeat repair endpoint that removes unreachable members
+- service tests proving routing avoids failed nodes after repair
 
 Remaining work:
 
 - add membership gossip or a control-plane bootstrap service
-- add heartbeat-based failure detection
+- add background heartbeat scheduling
+- add service-runtime replica recovery for keys owned by failed nodes
 - add process supervision scripts
 
 ## Phase 6: Replication

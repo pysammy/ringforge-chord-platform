@@ -30,6 +30,7 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         nodeServer.server.createContext("/node/members", nodeServer::members);
         nodeServer.server.createContext("/node/join", nodeServer::join);
         nodeServer.server.createContext("/node/stabilize", nodeServer::stabilize);
+        nodeServer.server.createContext("/node/heartbeat-repair", nodeServer::heartbeatRepair);
         nodeServer.server.createContext("/node/notify", nodeServer::notify);
         nodeServer.server.createContext("/node/successor", nodeServer::successor);
         nodeServer.server.createContext("/node/predecessor", nodeServer::predecessor);
@@ -102,6 +103,18 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         try {
             node.stabilize();
             sendJson(exchange, 200, ServiceJson.state(node));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void heartbeatRepair(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            List<Integer> failedNodeIds = node.repairFailedMembers();
+            sendJson(exchange, 200, ServiceJson.heartbeatRepair(node.members(), failedNodeIds));
         } catch (RuntimeException error) {
             sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
         }

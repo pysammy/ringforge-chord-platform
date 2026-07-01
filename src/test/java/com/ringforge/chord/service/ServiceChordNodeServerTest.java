@@ -6,6 +6,7 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -122,6 +123,49 @@ class ServiceChordNodeServerTest {
             assertEquals(100, result.responsibleNodeId());
             assertEquals("ninety-nine", client100.getLocal(99).orElseThrow(AssertionError::new));
             assertTrue(client110.getLocal(99).isEmpty());
+        }
+    }
+
+    @Test
+    void heartbeatRepairRemovesFailedNodeFromServiceRouting() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0)) {
+
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
+            client0.put(45, "survives-routing-repair", Collections.emptyList());
+            assertEquals(Arrays.asList(0, 30, 65), client0.lookup(45, Collections.emptyList()).path());
+
+            server30.close();
+
+            List<NodeEndpoint> repairedMembers = client0.repairMembership();
+            List<Integer> repairedNodeIds = repairedMembers.stream()
+                    .map(NodeEndpoint::nodeId)
+                    .collect(Collectors.toList());
+
+            assertEquals(Arrays.asList(0, 65), repairedNodeIds);
+            ServiceLookupResult repairedLookup = client0.lookup(45, Collections.emptyList());
+            assertTrue(repairedLookup.found());
+            assertEquals("survives-routing-repair", repairedLookup.value().orElseThrow(AssertionError::new));
+            assertEquals(65, repairedLookup.responsibleNodeId());
+            assertEquals(Arrays.asList(0, 65), repairedLookup.path());
+            assertEquals(Arrays.asList(0, 65), client65.members().stream()
+                    .map(NodeEndpoint::nodeId)
+                    .collect(Collectors.toList()));
         }
     }
 

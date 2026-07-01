@@ -99,6 +99,28 @@ public final class ServiceChordNode {
         }
     }
 
+    public List<Integer> repairFailedMembers() {
+        List<NodeEndpoint> survivors = new ArrayList<>();
+        List<Integer> failed = new ArrayList<>();
+        for (NodeEndpoint member : members()) {
+            if (member.nodeId() == nodeId) {
+                survivors.add(member);
+                continue;
+            }
+            if (new ServiceChordClient(member.baseUri()).isHealthy()) {
+                survivors.add(member);
+            } else {
+                failed.add(member.nodeId());
+            }
+        }
+
+        if (!failed.isEmpty()) {
+            configureCluster(survivors, true);
+            propagateMembership(survivors);
+        }
+        return Collections.unmodifiableList(failed);
+    }
+
     private void configureCluster(List<NodeEndpoint> members, boolean rebalanceLocalKeys) {
         if (members.stream().noneMatch(member -> member.nodeId() == nodeId)) {
             throw new IllegalArgumentException("Member list does not contain this node: " + nodeId);
@@ -162,7 +184,11 @@ public final class ServiceChordNode {
 
     private void propagateMembership(List<NodeEndpoint> members) {
         for (NodeEndpoint member : members) {
-            new ServiceChordClient(member.baseUri()).refreshMembers(members);
+            try {
+                new ServiceChordClient(member.baseUri()).refreshMembers(members);
+            } catch (RuntimeException ignored) {
+                // Heartbeat repair may race with a process that has just disappeared.
+            }
         }
     }
 

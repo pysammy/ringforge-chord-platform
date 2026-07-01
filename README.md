@@ -121,6 +121,7 @@ Implemented so far:
 - independent Chord node service with HTTP lookup forwarding
 - bootstrap join for service nodes
 - deterministic stabilize/notify/membership APIs
+- heartbeat repair for failed service-node membership
 - key rebalancing after service-node membership changes
 - service-level integration tests that route requests across multiple node processes
 - local HTTP API
@@ -214,6 +215,7 @@ POST /node/members
 POST /node/join
 POST /node/notify
 POST /node/stabilize
+POST /node/heartbeat-repair
 GET  /node/successor
 GET  /node/predecessor
 GET  /node/finger-table
@@ -222,7 +224,7 @@ POST /keys/put?key=...&value=...
 GET  /keys/local?key=...
 ```
 
-The current service-node implementation supports deterministic bootstrap join. Heartbeat failure detection and automatic repair are the next service-runtime steps.
+The current service-node implementation supports deterministic bootstrap join and explicit heartbeat repair. Background heartbeat scheduling and replica recovery in the service runtime are the next service-runtime steps.
 
 ## Current Reliability Behavior
 

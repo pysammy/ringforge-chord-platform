@@ -13,7 +13,7 @@ services:
       - --heartbeat-ms
       - "750"
     ports:
-      - "5100:5100"
+      - "${NODE0_PORT:-5100}:5100"
 
   node-30:
     build:
@@ -33,13 +33,14 @@ services:
       - --heartbeat-ms
       - "750"
     ports:
-      - "5101:5100"
+      - "${NODE30_PORT:-5101}:5100"
 
   node-65:
     build:
       context: ..
     depends_on:
       - node-0
+      - node-30
     command:
       - com.ringforge.chord.app.ServiceNodeMain
       - --id
@@ -53,7 +54,7 @@ services:
       - --heartbeat-ms
       - "750"
     ports:
-      - "5102:5100"
+      - "${NODE65_PORT:-5102}:5100"
 
   gateway:
     build:
@@ -69,4 +70,4 @@ services:
       - --bootstrap
       - http://node-0:5100
     ports:
-      - "8081:8081"
+      - "${GATEWAY_PORT:-8081}:8081"

@@ -75,7 +75,7 @@ public final class ServiceChordNode {
         return replicaStore.snapshot();
     }
 
-    public void configureCluster(List<NodeEndpoint> members) {
+    public synchronized void configureCluster(List<NodeEndpoint> members) {
         configureCluster(members, true);
     }
 
@@ -85,13 +85,13 @@ public final class ServiceChordNode {
         propagateMembership(members);
     }
 
-    public List<NodeEndpoint> members() {
+    public synchronized List<NodeEndpoint> members() {
         List<NodeEndpoint> members = new ArrayList<>(endpoints.values());
         members.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
         return Collections.unmodifiableList(members);
     }
 
-    public List<NodeEndpoint> addMember(NodeEndpoint endpoint) {
+    public synchronized List<NodeEndpoint> addMember(NodeEndpoint endpoint) {
         List<NodeEndpoint> members = new ArrayList<>(endpoints.values());
         members.removeIf(member -> member.nodeId() == endpoint.nodeId());
         members.add(endpoint);
@@ -99,15 +99,15 @@ public final class ServiceChordNode {
         return members();
     }
 
-    public void replaceMembers(List<NodeEndpoint> members) {
+    public synchronized void replaceMembers(List<NodeEndpoint> members) {
         configureCluster(members, true);
     }
 
-    public void stabilize() {
+    public synchronized void stabilize() {
         configureCluster(members(), true);
     }
 
-    public void notify(NodeEndpoint endpoint) {
+    public synchronized void notify(NodeEndpoint endpoint) {
         List<NodeEndpoint> members = new ArrayList<>(endpoints.values());
         if (members.stream().noneMatch(member -> member.nodeId() == endpoint.nodeId())) {
             members.add(endpoint);

@@ -283,9 +283,11 @@ Container and Kubernetes artifacts:
 
 ```bash
 docker build -t ringforge-chord-platform:local .
-docker compose -f deploy/docker-compose.yml up --build
+GATEWAY_PORT=18081 docker compose -f deploy/docker-compose.yml up --build
 kubectl apply -f deploy/kubernetes/ringforge-demo.yaml
 ```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the validated Docker Compose and Kubernetes smoke-test flow.
 
 The service-node runtime supports deterministic bootstrap join, retry-aware node startup, background heartbeat repair, successor replication, and replica promotion.
 

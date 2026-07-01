@@ -24,6 +24,8 @@ function renderSnapshot() {
   document.getElementById("problem").textContent = snapshot.problem;
   document.getElementById("nodeCount").textContent = `${snapshot.metrics.nodeCount} nodes`;
   document.getElementById("keyCount").textContent = `${snapshot.metrics.keyCount} keys`;
+  document.getElementById("replicaCount").textContent = `${snapshot.metrics.replicaCount} replicas`;
+  document.getElementById("failedCount").textContent = `${snapshot.metrics.failedNodeCount} failed`;
 
   const badge = document.getElementById("healthBadge");
   badge.textContent = snapshot.metrics.healthy ? "Healthy" : "Needs attention";

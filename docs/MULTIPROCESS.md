@@ -43,7 +43,7 @@ That means a Chord node can use remote storage through the same interface as in-
 
 ## What The Tests Prove
 
-The integration tests prove three things:
+The integration tests prove these things:
 
 1. Remote storage supports put, get, delete, snapshot, and drain.
 2. Remote drain returns values and clears the server.
@@ -82,12 +82,13 @@ POST /keys/put?key=...&value=...
 GET  /keys/local?key=...
 ```
 
-Current limitation:
+Current behavior:
 
 - membership is deterministic and propagated through a bootstrap node
-- full gossip-style membership is not implemented yet
+- heartbeat repair can run explicitly or on a background schedule
+- local scripts can launch and stop a multi-process service cluster
 
-This means the runtime now proves node-to-node forwarding and bootstrap joins, but does not yet implement heartbeat-driven membership repair.
+This means the runtime now proves node-to-node forwarding, bootstrap joins, successor replication, and heartbeat-driven membership repair.
 
 ## Bootstrap Join
 
@@ -115,20 +116,9 @@ Key 99 migrates from node 110 to node 100.
 Future lookups resolve to node 100.
 ```
 
-## What Is Not Done Yet
+## Runtime Membership API
 
-The full Chord node is not yet independently responsible for:
-
-- background stabilization
-- heartbeat checks
-- membership gossip
-
-Those are the next pieces required for a true multi-process Chord cluster.
-
-## Next Implementation Slice
-
-The next slice should introduce a `ChordNodeService` process with endpoints such as:
-The runtime now exposes deterministic membership and stabilization endpoints:
+The runtime exposes deterministic membership and stabilization endpoints:
 
 ```text
 POST /node/join
@@ -140,6 +130,7 @@ POST /node/members
 GET  /node/successor
 GET  /node/predecessor
 GET  /node/finger-table
+GET  /node/heartbeat-status
 ```
 
 ## Heartbeat Repair
@@ -170,9 +161,7 @@ Membership becomes 0 -> 65.
 Lookup from node 0 routes [0, 65].
 ```
 
-Current limitation:
-
-- heartbeat repair is explicit; it is not yet running on a background schedule
+Background scheduling is available through `ServiceChordNodeServer.start(node, port, heartbeatIntervalMillis)` and through the service-node process entry point.
 
 ## Service Runtime Replication
 
@@ -205,7 +194,36 @@ Node 65 promotes its replica for key 20.
 Lookup for key 20 resolves to node 65.
 ```
 
-The next slice should add background heartbeat scheduling and a local cluster launcher.
+## Local Cluster Launcher
+
+Run:
+
+```bash
+scripts/start-local-service-cluster.sh
+```
+
+Defaults:
+
+```text
+NODE_IDS=0,30,65,110
+BASE_PORT=5100
+HEARTBEAT_MS=750
+BIT_LENGTH=8
+REPLICATION_FACTOR=3
+```
+
+Inspect:
+
+```bash
+curl http://localhost:5100/node/state
+curl http://localhost:5100/node/heartbeat-status
+```
+
+Stop:
+
+```bash
+scripts/stop-local-service-cluster.sh
+```
 
 The storage server and service-node runtime can then be combined into one independently deployable node process.
 

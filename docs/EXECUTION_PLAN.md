@@ -146,7 +146,7 @@ Deliverable:
 
 Goal: make nodes communicate like real distributed services.
 
-Status: storage transport, node-to-node routing, deterministic bootstrap join, and explicit heartbeat repair complete.
+Status: storage transport, node-to-node routing, deterministic bootstrap join, background heartbeat repair, and local process scripts complete.
 
 Example local usage:
 
@@ -182,16 +182,18 @@ Current implementation:
 - deterministic stabilize and notify endpoints
 - key rebalancing after service-node membership changes
 - heartbeat repair endpoint that removes unreachable members
+- background heartbeat scheduler for autonomous repair
 - service tests proving routing avoids failed nodes after repair
 - service-runtime successor replication
 - replica promotion when the primary owner fails
 - service tests proving key availability after primary-owner failure
+- service-node process entry point
+- local cluster start and stop scripts
 
 Remaining work:
 
-- add membership gossip or a control-plane bootstrap service
-- add background heartbeat scheduling
-- add process supervision scripts
+- add richer gossip or a control-plane service for larger clusters
+- add production-grade process supervision outside local scripts
 
 ## Phase 6: Replication
 
@@ -229,7 +231,7 @@ Current implementation:
 
 Goal: handle nodes that crash without calling `leave()`.
 
-Status: crash simulation complete; heartbeat detection is future multi-process work.
+Status: crash simulation and service-node background heartbeat repair complete.
 
 Tasks:
 
@@ -248,6 +250,8 @@ Current implementation:
 - `POST /api/crash?node={id}` removes a node without graceful handoff
 - promoted replicas preserve crashed-node primary keys when replicas exist
 - failed node history appears in diagnostics and ops advice
+- service nodes can run scheduled heartbeat repair and remove failed peers automatically
+- service tests prove automatic repair can promote a replica after primary-owner failure
 
 ## Phase 8: Observability
 

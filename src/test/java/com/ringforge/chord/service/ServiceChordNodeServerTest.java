@@ -3,12 +3,15 @@ package com.ringforge.chord.service;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ServiceChordNodeServerTest {
@@ -238,7 +241,92 @@ class ServiceChordNodeServerTest {
         }
     }
 
+    @Test
+    void backgroundHeartbeatRepairsMembershipAndPromotesReplica() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0, 50);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0, 50);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0, 50)) {
+
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
+
+            client0.put(20, "background-promoted", Collections.emptyList());
+            assertEquals("background-promoted", client65.getReplica(20).orElseThrow(AssertionError::new));
+
+            server30.close();
+
+            await(() -> memberIds(client0).equals(Arrays.asList(0, 65)));
+            await(() -> client65.getLocal(20).isPresent());
+
+            ServiceLookupResult lookup = client0.lookup(20, Collections.emptyList());
+            assertTrue(lookup.found());
+            assertEquals(65, lookup.responsibleNodeId());
+            assertEquals("background-promoted", lookup.value().orElseThrow(AssertionError::new));
+            assertEquals(Arrays.asList(0, 65), lookup.path());
+        }
+    }
+
+    @Test
+    void heartbeatStatusEndpointReportsSchedulerActivity() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0, 30)) {
+            node0.configureCluster(Collections.singletonList(endpoint(0, server0.port())));
+
+            await(() -> {
+                String status = read(endpoint(0, server0.port()).baseUri().resolve("/node/heartbeat-status"));
+                return status.contains("\"enabled\":true") && !status.contains("\"runCount\":0");
+            });
+
+            String status = read(endpoint(0, server0.port()).baseUri().resolve("/node/heartbeat-status"));
+            assertTrue(status.contains("\"enabled\":true"));
+            assertTrue(status.contains("\"intervalMillis\":30"));
+        }
+    }
+
     private static NodeEndpoint endpoint(int nodeId, int port) {
         return new NodeEndpoint(nodeId, URI.create("http://localhost:" + port));
+    }
+
+    private static List<Integer> memberIds(ServiceChordClient client) {
+        try {
+            return client.members().stream()
+                    .map(NodeEndpoint::nodeId)
+                    .collect(Collectors.toList());
+        } catch (RuntimeException error) {
+            return Collections.emptyList();
+        }
+    }
+
+    private static String read(URI uri) {
+        try {
+            return new String(uri.toURL().openStream().readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
+    private static void await(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(25);
+        }
+        fail("condition was not met before timeout");
     }
 }

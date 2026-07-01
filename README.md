@@ -2,7 +2,7 @@
 
 RingForge is a Java distributed key-placement and routing diagnostics platform based on Chord-style consistent hashing. The project focuses on a practical infrastructure problem: helping engineers understand where data belongs, how lookups are routed, and whether a cluster remains healthy while nodes join, leave, or fail.
 
-The first milestone provides an in-memory Chord ring with node joins, node leaves, finger tables, key insertion, lookup, key migration, health checks, a local API, and an engineer-facing browser console. Later milestones will evolve the system into a real multi-process service with networking, replication, failure detection, observability, and automated correctness testing.
+The current milestone provides an in-memory Chord ring with node joins, node leaves, finger tables, key insertion, lookup, key migration, health checks, a local API, an engineer-facing browser console, and an HTTP service-node runtime with replication and heartbeat repair.
 
 ## Why This Project Exists
 
@@ -102,7 +102,7 @@ java -jar target/ringforge-chord-platform.jar
 
 ## Current Status
 
-Status: Phase 1 implementation started.
+Status: Java simulation, local API, browser console, and service-node runtime implemented.
 
 Implemented so far:
 
@@ -122,9 +122,12 @@ Implemented so far:
 - bootstrap join for service nodes
 - deterministic stabilize/notify/membership APIs
 - heartbeat repair for failed service-node membership
+- background heartbeat scheduling for service-node repair
 - service-runtime successor replication
 - service-runtime replica promotion after primary-owner failure
 - key rebalancing after service-node membership changes
+- local service-node process entry point
+- local cluster start and stop scripts
 - service-level integration tests that route requests across multiple node processes
 - local HTTP API
 - browser-based RingForge Console
@@ -218,6 +221,7 @@ POST /node/join
 POST /node/notify
 POST /node/stabilize
 POST /node/heartbeat-repair
+GET  /node/heartbeat-status
 GET  /node/successor
 GET  /node/predecessor
 GET  /node/finger-table
@@ -228,7 +232,25 @@ POST /replicas/put?key=...&value=...
 GET  /replicas/local?key=...
 ```
 
-The current service-node implementation supports deterministic bootstrap join, explicit heartbeat repair, successor replication, and replica promotion. Background heartbeat scheduling and process supervision are the next service-runtime steps.
+Run a service node process:
+
+```bash
+mvn package
+java -cp target/classes com.ringforge.chord.app.ServiceNodeMain \
+  --id 0 \
+  --port 5100 \
+  --heartbeat-ms 750
+```
+
+Run a local four-node service cluster:
+
+```bash
+scripts/start-local-service-cluster.sh
+curl http://localhost:5100/node/state
+scripts/stop-local-service-cluster.sh
+```
+
+The service-node runtime now supports deterministic bootstrap join, background heartbeat repair, successor replication, and replica promotion.
 
 ## Current Reliability Behavior
 

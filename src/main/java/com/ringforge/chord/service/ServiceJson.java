@@ -103,6 +103,27 @@ final class ServiceJson {
         return json.toString();
     }
 
+    static String heartbeatStatus(ServiceHeartbeatScheduler scheduler) {
+        StringBuilder json = new StringBuilder();
+        json.append('{');
+        json.append("\"enabled\":").append(scheduler != null).append(',');
+        json.append("\"intervalMillis\":").append(scheduler == null ? 0 : scheduler.intervalMillis()).append(',');
+        json.append("\"runCount\":").append(scheduler == null ? 0 : scheduler.runCount()).append(',');
+        json.append("\"lastRunEpochMillis\":").append(scheduler == null ? 0 : scheduler.lastRunEpochMillis()).append(',');
+        json.append("\"lastFailedNodeIds\":[");
+        if (scheduler != null) {
+            List<Integer> failedNodeIds = scheduler.lastFailedNodeIds();
+            for (int i = 0; i < failedNodeIds.size(); i++) {
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append(failedNodeIds.get(i));
+            }
+        }
+        json.append("]}");
+        return json.toString();
+    }
+
     static String valueResponse(boolean found, String value) {
         if (!found) {
             return "{\"found\":false,\"value\":null}";

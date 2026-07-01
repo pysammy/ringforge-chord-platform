@@ -18,19 +18,33 @@ import java.util.concurrent.Executors;
 public final class ServiceChordNodeServer implements AutoCloseable {
     private final ServiceChordNode node;
     private final HttpServer server;
+    private final ServiceHeartbeatScheduler heartbeatScheduler;
 
-    private ServiceChordNodeServer(ServiceChordNode node, HttpServer server) {
+    private ServiceChordNodeServer(ServiceChordNode node, HttpServer server, ServiceHeartbeatScheduler heartbeatScheduler) {
         this.node = node;
         this.server = server;
+        this.heartbeatScheduler = heartbeatScheduler;
     }
 
     public static ServiceChordNodeServer start(ServiceChordNode node, int port) throws IOException {
-        ServiceChordNodeServer nodeServer = new ServiceChordNodeServer(node, HttpServer.create(new InetSocketAddress(port), 0));
+        return start(node, port, 0);
+    }
+
+    public static ServiceChordNodeServer start(ServiceChordNode node, int port, long heartbeatIntervalMillis) throws IOException {
+        ServiceHeartbeatScheduler scheduler = heartbeatIntervalMillis > 0
+                ? new ServiceHeartbeatScheduler(node, heartbeatIntervalMillis)
+                : null;
+        ServiceChordNodeServer nodeServer = new ServiceChordNodeServer(
+                node,
+                HttpServer.create(new InetSocketAddress(port), 0),
+                scheduler
+        );
         nodeServer.server.createContext("/node/state", nodeServer::state);
         nodeServer.server.createContext("/node/members", nodeServer::members);
         nodeServer.server.createContext("/node/join", nodeServer::join);
         nodeServer.server.createContext("/node/stabilize", nodeServer::stabilize);
         nodeServer.server.createContext("/node/heartbeat-repair", nodeServer::heartbeatRepair);
+        nodeServer.server.createContext("/node/heartbeat-status", nodeServer::heartbeatStatus);
         nodeServer.server.createContext("/node/notify", nodeServer::notify);
         nodeServer.server.createContext("/node/successor", nodeServer::successor);
         nodeServer.server.createContext("/node/predecessor", nodeServer::predecessor);
@@ -43,6 +57,9 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         nodeServer.server.createContext("/node/health", nodeServer::health);
         nodeServer.server.setExecutor(Executors.newFixedThreadPool(6));
         nodeServer.server.start();
+        if (nodeServer.heartbeatScheduler != null) {
+            nodeServer.heartbeatScheduler.start();
+        }
         return nodeServer;
     }
 
@@ -56,6 +73,9 @@ public final class ServiceChordNodeServer implements AutoCloseable {
 
     @Override
     public void close() {
+        if (heartbeatScheduler != null) {
+            heartbeatScheduler.close();
+        }
         server.stop(0);
     }
 
@@ -120,6 +140,13 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         } catch (RuntimeException error) {
             sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
         }
+    }
+
+    private void heartbeatStatus(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        sendJson(exchange, 200, ServiceJson.heartbeatStatus(heartbeatScheduler));
     }
 
     private void notify(HttpExchange exchange) throws IOException {

@@ -1,12 +1,22 @@
 const state = {
   snapshot: null,
   lookup: null,
+  service: null,
 };
 
 const nodeColors = ["#2f6fbd", "#1f8f6a", "#b67818", "#7257a8", "#167f89", "#c44747", "#3b7d4b", "#8b5a2b"];
 
 async function api(path, options = {}) {
   const response = await fetch(path, options);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Request failed");
+  }
+  return data;
+}
+
+async function externalApi(baseUrl, path) {
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`);
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || "Request failed");
@@ -308,6 +318,51 @@ async function runBenchmark() {
   }
 }
 
+async function inspectServiceRuntime() {
+  const target = document.getElementById("serviceRuntime");
+  const baseUrl = document.getElementById("gatewayUrl").value || "http://localhost:8081";
+  target.textContent = "Inspecting service cluster...";
+  try {
+    const [snapshot, opsReport] = await Promise.all([
+      externalApi(baseUrl, "/api/cluster/snapshot"),
+      externalApi(baseUrl, "/api/cluster/ops-report"),
+    ]);
+    state.service = { snapshot, opsReport };
+    renderServiceRuntime(snapshot, opsReport);
+  } catch (error) {
+    target.textContent = error.message;
+  }
+}
+
+function renderServiceRuntime(snapshot, opsReport) {
+  const target = document.getElementById("serviceRuntime");
+  const nodes = snapshot.nodes || [];
+  const metrics = snapshot.metrics || {};
+  const nodeRows = nodes.map((node) => {
+    const state = node.state || {};
+    const primaryCount = state.keys ? Object.keys(state.keys).length : 0;
+    const replicaCount = state.replicas ? Object.keys(state.replicas).length : 0;
+    const status = node.reachable ? "reachable" : "unreachable";
+    return `
+      <div class="service-node">
+        <strong>Node ${node.nodeId}</strong>
+        <span>${status} · ${primaryCount} primary · ${replicaCount} replicas</span>
+      </div>
+    `;
+  }).join("");
+  const summary = (opsReport.summary || []).map((line) => `<div class="advice-row">${line}</div>`).join("");
+  target.innerHTML = `
+    <div class="service-metrics">
+      <span>${snapshot.memberCount} members</span>
+      <span>${metrics.reachableCount || 0} reachable</span>
+      <span>${metrics.primaryKeyCount || 0} primary keys</span>
+      <span>${metrics.replicaKeyCount || 0} replicas</span>
+    </div>
+    <div class="service-nodes">${nodeRows || "No nodes returned."}</div>
+    <div class="service-summary">${summary}</div>
+  `;
+}
+
 document.getElementById("lookupButton").addEventListener("click", performLookup);
 document.getElementById("leaveButton").addEventListener("click", () => mutate("/api/leave?node=65"));
 document.getElementById("crashButton").addEventListener("click", () => mutate("/api/crash?node=65"));
@@ -315,6 +370,7 @@ document.getElementById("joinButton").addEventListener("click", () => mutate("/a
 document.getElementById("repairButton").addEventListener("click", () => mutate("/api/repair"));
 document.getElementById("benchmarkButton").addEventListener("click", runBenchmark);
 document.getElementById("resetButton").addEventListener("click", () => mutate("/api/reset"));
+document.getElementById("serviceRefreshButton").addEventListener("click", inspectServiceRuntime);
 window.addEventListener("resize", () => state.snapshot && drawRing(state.snapshot, state.lookup));
 
 refresh().catch((error) => {

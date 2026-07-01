@@ -84,6 +84,18 @@
         </section>
 
         <section>
+          <h2>Service Runtime</h2>
+          <div class="service-controls">
+            <label>
+              Gateway
+              <input id="gatewayUrl" type="url" value="http://localhost:8081">
+            </label>
+            <button id="serviceRefreshButton">Inspect</button>
+          </div>
+          <div id="serviceRuntime" class="service-runtime">Start the gateway and inspect the live service cluster.</div>
+        </section>
+
+        <section>
           <h2>Event Timeline</h2>
           <div id="eventTimeline" class="event-timeline"></div>
         </section>

@@ -68,6 +68,14 @@ public final class ServiceChordClient {
         return parseMembers(request("GET", "/node/members"));
     }
 
+    public String nodeStateJson() {
+        return request("GET", "/node/state");
+    }
+
+    public String heartbeatStatusJson() {
+        return request("GET", "/node/heartbeat-status");
+    }
+
     public void stabilize() {
         request("POST", "/node/stabilize");
     }

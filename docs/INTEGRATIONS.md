@@ -66,17 +66,21 @@ Current progress:
 - standalone HTTP storage node
 - HTTP storage client
 - integration tests for remote store behavior
+- independent service-node process
+- service gateway process
+- Dockerfile
+- Docker Compose demo
+- Kubernetes demo manifests
 
-Future artifacts:
+Artifacts:
 
 ```text
 Dockerfile
-k8s/statefulset.yaml
-k8s/service.yaml
-k8s/configmap.yaml
+deploy/docker-compose.yml
+deploy/kubernetes/ringforge-demo.yaml
 ```
 
-Kubernetes should come after nodes communicate over the network. Until then, it would only package a simulation.
+Kubernetes is now attached to the service-node runtime and gateway, not to the simulation.
 
 ## LLM / Agentic Operations
 
@@ -93,8 +97,10 @@ Current seam:
 - `OpsAdvice`
 - `BenchmarkReport`
 - `RingEvent`
+- service gateway `/api/cluster/ops-report`
+- `OperationsPromptBuilder`
 
-Future flow:
+Flow:
 
 ```text
 cluster snapshot + diagnostics + events + benchmark

@@ -1,0 +1,72 @@
+services:
+  node-0:
+    build:
+      context: ..
+    command:
+      - com.ringforge.chord.app.ServiceNodeMain
+      - --id
+      - "0"
+      - --port
+      - "5100"
+      - --host
+      - node-0
+      - --heartbeat-ms
+      - "750"
+    ports:
+      - "5100:5100"
+
+  node-30:
+    build:
+      context: ..
+    depends_on:
+      - node-0
+    command:
+      - com.ringforge.chord.app.ServiceNodeMain
+      - --id
+      - "30"
+      - --port
+      - "5100"
+      - --host
+      - node-30
+      - --join
+      - http://node-0:5100
+      - --heartbeat-ms
+      - "750"
+    ports:
+      - "5101:5100"
+
+  node-65:
+    build:
+      context: ..
+    depends_on:
+      - node-0
+    command:
+      - com.ringforge.chord.app.ServiceNodeMain
+      - --id
+      - "65"
+      - --port
+      - "5100"
+      - --host
+      - node-65
+      - --join
+      - http://node-0:5100
+      - --heartbeat-ms
+      - "750"
+    ports:
+      - "5102:5100"
+
+  gateway:
+    build:
+      context: ..
+    depends_on:
+      - node-0
+      - node-30
+      - node-65
+    command:
+      - com.ringforge.chord.app.ServiceGatewayServer
+      - --port
+      - "8081"
+      - --bootstrap
+      - http://node-0:5100
+    ports:
+      - "8081:8081"

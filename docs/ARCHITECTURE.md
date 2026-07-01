@@ -120,13 +120,24 @@ com.ringforge.chord.simulation
   InvariantChecker
 
 com.ringforge.chord.api
-  future HTTP/gRPC layer
+  JSON serialization for the simulation API
+
+com.ringforge.chord.service
+  independent HTTP service-node runtime
+  node-to-node forwarding
+  heartbeat repair
+  successor replication
 
 com.ringforge.chord.metrics
-  future metrics layer
+  benchmark report models
 
 com.ringforge.chord.llm
-  future LLM operations assistant layer
+  LLM-safe operations prompt boundary
+
+com.ringforge.chord.app
+  simulation console server
+  service node process
+  service gateway process
 ```
 
 ## Design Principles
@@ -219,6 +230,20 @@ Useful for:
 - high availability concepts
 - failure recovery
 - backend/infra interview depth
+
+### Stage 5: DHT-As-A-Service Gateway
+
+A gateway exposes client-facing operations above the service-node cluster:
+
+```text
+POST /api/dht/put
+GET  /api/dht/get
+GET  /api/cluster/snapshot
+GET  /api/cluster/ops-report
+GET  /metrics
+```
+
+The gateway does not decide ownership. It delegates reads and writes to the Chord service nodes, then aggregates deterministic state for engineers, dashboards, metrics, and optional LLM explanations.
 
 ## Major Technical Risks
 

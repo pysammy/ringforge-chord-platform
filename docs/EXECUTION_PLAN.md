@@ -146,7 +146,7 @@ Deliverable:
 
 Goal: make nodes communicate like real distributed services.
 
-Status: storage transport, node-to-node routing, deterministic bootstrap join, background heartbeat repair, and local process scripts complete.
+Status: storage transport, node-to-node routing, deterministic bootstrap join, background heartbeat repair, gateway API, and local process scripts complete.
 
 Example local usage:
 
@@ -188,7 +188,9 @@ Current implementation:
 - replica promotion when the primary owner fails
 - service tests proving key availability after primary-owner failure
 - service-node process entry point
+- retry-aware service-node startup for containerized environments
 - local cluster start and stop scripts
+- DHT service gateway for reads, writes, snapshots, metrics, and ops reports
 
 Remaining work:
 
@@ -199,7 +201,7 @@ Remaining work:
 
 Goal: prevent data loss when a node fails.
 
-Status: local simulation complete.
+Status: local simulation and service runtime complete for primary write replication and replica promotion.
 
 Approach:
 
@@ -226,6 +228,8 @@ Current implementation:
 - successor replica placement
 - replica rebuild after put, delete, join, leave, and repair
 - replica promotion after simulated crash
+- service-runtime successor replication for routed writes
+- service-runtime replica promotion after heartbeat repair
 
 ## Phase 7: Failure Detection And Recovery
 
@@ -257,7 +261,7 @@ Current implementation:
 
 Goal: make the system debuggable like real infrastructure.
 
-Status: local API and UI observability in progress.
+Status: local API, UI observability, gateway metrics, and ops reports complete for the current milestone.
 
 Metrics:
 
@@ -290,12 +294,16 @@ Current implementation:
 - ops advice endpoint
 - browser timeline
 - lookup benchmark summary
+- service gateway `/metrics` endpoint
+- service gateway `/api/cluster/snapshot`
+- service gateway `/api/cluster/ops-report`
+- browser Service Runtime inspector for live gateway state
 
 ## Phase 9: Simulation And Benchmarking
 
 Goal: analyze behavior under scale and churn.
 
-Status: first benchmark path complete.
+Status: benchmark path and deterministic churn correctness test complete.
 
 Scenarios:
 
@@ -323,12 +331,13 @@ Current implementation:
 
 - benchmark runs lookups from every active node to every primary key
 - reports lookup count, node count, key count, average hops, max hops, and health
+- deterministic churn test repeatedly performs joins, leaves, writes, repairs, and read verification
 
 ## Phase 10: LLM-Assisted Operations
 
 Goal: use LLMs in a practical, backend-relevant way without making them part of the core correctness path.
 
-Status: deterministic ops-advice layer complete; external LLM integration is future work.
+Status: deterministic ops-advice layer and LLM-safe prompt boundary complete; external LLM API call is intentionally optional.
 
 Possible features:
 
@@ -346,6 +355,11 @@ The LLM should assist humans. It should not decide key ownership, replication, o
 Deliverable:
 
 - optional operations assistant layered on top of deterministic system state
+
+Current implementation:
+
+- `/api/cluster/ops-report` produces structured deterministic context
+- `OperationsPromptBuilder` wraps that context with strict instructions that keep the LLM outside key ownership, routing, liveness, and replica placement decisions
 
 ## Final Target Resume Version
 

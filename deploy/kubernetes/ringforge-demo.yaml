@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-node-0
+spec:
+  selector:
+    app: ringforge-node-0
+  ports:
+    - name: http
+      port: 5100
+      targetPort: 5100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-node-0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-node-0
+  template:
+    metadata:
+      labels:
+        app: ringforge-node-0
+    spec:
+      containers:
+        - name: node
+          image: ringforge-chord-platform:local
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceNodeMain
+            - --id
+            - "0"
+            - --port
+            - "5100"
+            - --host
+            - ringforge-node-0
+            - --heartbeat-ms
+            - "750"
+          ports:
+            - containerPort: 5100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-node-30
+spec:
+  selector:
+    app: ringforge-node-30
+  ports:
+    - name: http
+      port: 5100
+      targetPort: 5100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-node-30
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-node-30
+  template:
+    metadata:
+      labels:
+        app: ringforge-node-30
+    spec:
+      containers:
+        - name: node
+          image: ringforge-chord-platform:local
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceNodeMain
+            - --id
+            - "30"
+            - --port
+            - "5100"
+            - --host
+            - ringforge-node-30
+            - --join
+            - http://ringforge-node-0:5100
+            - --heartbeat-ms
+            - "750"
+          ports:
+            - containerPort: 5100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-node-65
+spec:
+  selector:
+    app: ringforge-node-65
+  ports:
+    - name: http
+      port: 5100
+      targetPort: 5100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-node-65
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-node-65
+  template:
+    metadata:
+      labels:
+        app: ringforge-node-65
+    spec:
+      containers:
+        - name: node
+          image: ringforge-chord-platform:local
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceNodeMain
+            - --id
+            - "65"
+            - --port
+            - "5100"
+            - --host
+            - ringforge-node-65
+            - --join
+            - http://ringforge-node-0:5100
+            - --heartbeat-ms
+            - "750"
+          ports:
+            - containerPort: 5100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-gateway
+spec:
+  type: NodePort
+  selector:
+    app: ringforge-gateway
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-gateway
+  template:
+    metadata:
+      labels:
+        app: ringforge-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: ringforge-chord-platform:local
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceGatewayServer
+            - --port
+            - "8081"
+            - --bootstrap
+            - http://ringforge-node-0:5100
+          ports:
+            - containerPort: 8081

@@ -22,6 +22,8 @@ public final class ServiceNodeMain {
         int bitLength = intOption(options, "bit-length", 8);
         int replicationFactor = intOption(options, "replication-factor", 3);
         long heartbeatMillis = longOption(options, "heartbeat-ms", 1_000L);
+        int joinRetries = intOption(options, "join-retries", 30);
+        long joinRetryMillis = longOption(options, "join-retry-ms", 1_000L);
         String host = options.getOrDefault("host", "localhost");
         String joinUri = options.get("join");
 
@@ -33,7 +35,7 @@ public final class ServiceNodeMain {
             if (joinUri == null || joinUri.trim().isEmpty()) {
                 node.configureCluster(Collections.singletonList(self));
             } else {
-                node.joinVia(self, new NodeEndpoint(-1, URI.create(joinUri)));
+                joinWithRetry(node, self, URI.create(joinUri), joinRetries, joinRetryMillis);
             }
         } catch (RuntimeException error) {
             server.close();
@@ -49,6 +51,35 @@ public final class ServiceNodeMain {
             stopped.countDown();
         }, "ringforge-service-node-shutdown"));
         stopped.await();
+    }
+
+    private static void joinWithRetry(ServiceChordNode node, NodeEndpoint self, URI joinUri,
+                                      int joinRetries, long joinRetryMillis) {
+        RuntimeException lastError = null;
+        int attempts = Math.max(1, joinRetries);
+        for (int attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                node.joinVia(self, new NodeEndpoint(-1, joinUri));
+                return;
+            } catch (RuntimeException error) {
+                lastError = error;
+                if (attempt == attempts) {
+                    break;
+                }
+                sleep(joinRetryMillis);
+            }
+        }
+        throw new IllegalStateException("Unable to join bootstrap " + joinUri + " after " + attempts + " attempt(s)",
+                lastError);
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting to join", error);
+        }
     }
 
     private static Map<String, String> parseArgs(String[] args) {

@@ -128,6 +128,10 @@ Implemented so far:
 - key rebalancing after service-node membership changes
 - local service-node process entry point
 - local cluster start and stop scripts
+- DHT service gateway for client-facing reads, writes, snapshots, metrics, and ops reports
+- Docker, Docker Compose, and Kubernetes demo deployment artifacts
+- deterministic churn test for repeated joins, leaves, writes, repairs, and reads
+- LLM-safe operations prompt builder
 - service-level integration tests that route requests across multiple node processes
 - local HTTP API
 - browser-based RingForge Console
@@ -250,7 +254,40 @@ curl http://localhost:5100/node/state
 scripts/stop-local-service-cluster.sh
 ```
 
-The service-node runtime now supports deterministic bootstrap join, background heartbeat repair, successor replication, and replica promotion.
+Run the DHT service gateway against that cluster:
+
+```bash
+java -cp target/classes com.ringforge.chord.app.ServiceGatewayServer \
+  --port 8081 \
+  --bootstrap http://localhost:5100
+```
+
+Gateway endpoints:
+
+```text
+POST /api/dht/put?key=...&value=...
+GET  /api/dht/get?key=...
+GET  /api/cluster/members
+GET  /api/cluster/snapshot
+GET  /api/cluster/ops-report
+GET  /metrics
+```
+
+The browser console includes a Service Runtime inspector that can point at the gateway URL, defaulting to:
+
+```text
+http://localhost:8081
+```
+
+Container and Kubernetes artifacts:
+
+```bash
+docker build -t ringforge-chord-platform:local .
+docker compose -f deploy/docker-compose.yml up --build
+kubectl apply -f deploy/kubernetes/ringforge-demo.yaml
+```
+
+The service-node runtime supports deterministic bootstrap join, retry-aware node startup, background heartbeat repair, successor replication, and replica promotion.
 
 ## Current Reliability Behavior
 
@@ -266,5 +303,5 @@ External technologies should attach to those proven seams:
 
 - Redis can implement `KeyValueStore`.
 - Kafka can persist the structured event log.
-- Kubernetes can run multi-process nodes after the full node-to-node routing phase.
-- LLMs can summarize diagnostics, event logs, benchmarks, and repair recommendations.
+- Kubernetes manifests run service nodes plus the gateway for a local demo deployment.
+- LLMs receive deterministic gateway ops reports through the prompt-builder boundary.

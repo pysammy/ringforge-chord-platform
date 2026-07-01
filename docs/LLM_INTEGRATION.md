@@ -116,24 +116,21 @@ Avoid using LLMs for:
 
 Those tasks must remain deterministic and code-driven.
 
-## Proposed LLM Module
+## Implemented LLM Boundary
 
-Future package:
+Package:
 
 ```text
 com.ringforge.chord.llm
 ```
 
-Potential classes:
+Class:
 
 ```text
-ClusterSnapshot
-LookupTrace
-HealthFinding
-LlmAnalysisRequest
-LlmAnalysisResponse
-OperationsAssistant
+OperationsPromptBuilder
 ```
+
+The gateway endpoint `/api/cluster/ops-report` produces deterministic JSON. `OperationsPromptBuilder` turns that JSON into a constrained prompt for an external LLM.
 
 ## Data Boundary
 
@@ -171,6 +168,13 @@ raw secrets, credentials, private user data, unbounded logs
 2. Represent diagnostics as structured JSON.
 3. Add an optional LLM summarizer for those diagnostics.
 4. Keep the system fully usable when the LLM feature is disabled.
+
+Current status:
+
+- deterministic diagnostics exist
+- gateway ops reports exist
+- LLM-safe prompt construction exists
+- no external LLM API call is required for correctness
 
 ## Resume-Relevant Framing
 

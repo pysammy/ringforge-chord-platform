@@ -169,6 +169,75 @@ class ServiceChordNodeServerTest {
         }
     }
 
+    @Test
+    void serviceRuntimeReplicatesPrimaryWritesToSuccessors() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0)) {
+
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client30 = new ServiceChordClient(endpoint(30, server30.port()).baseUri());
+            ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
+
+            client0.put(20, "replicated-primary", Collections.emptyList());
+
+            assertEquals("replicated-primary", client30.getLocal(20).orElseThrow(AssertionError::new));
+            assertEquals("replicated-primary", client65.getReplica(20).orElseThrow(AssertionError::new));
+            assertEquals("replicated-primary", client0.getReplica(20).orElseThrow(AssertionError::new));
+        }
+    }
+
+    @Test
+    void heartbeatRepairPromotesReplicaWhenPrimaryOwnerFails() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0)) {
+
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
+
+            client0.put(20, "promoted-after-failure", Collections.emptyList());
+            assertEquals(30, client0.lookup(20, Collections.emptyList()).responsibleNodeId());
+            assertEquals("promoted-after-failure", client65.getReplica(20).orElseThrow(AssertionError::new));
+
+            server30.close();
+            client0.repairMembership();
+
+            ServiceLookupResult repairedLookup = client0.lookup(20, Collections.emptyList());
+            assertTrue(repairedLookup.found());
+            assertEquals(65, repairedLookup.responsibleNodeId());
+            assertEquals("promoted-after-failure", repairedLookup.value().orElseThrow(AssertionError::new));
+            assertEquals("promoted-after-failure", client65.getLocal(20).orElseThrow(AssertionError::new));
+            assertEquals(Arrays.asList(0, 65), repairedLookup.path());
+        }
+    }
+
     private static NodeEndpoint endpoint(int nodeId, int port) {
         return new NodeEndpoint(nodeId, URI.create("http://localhost:" + port));
     }

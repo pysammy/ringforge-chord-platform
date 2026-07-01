@@ -172,9 +172,40 @@ Lookup from node 0 routes [0, 65].
 
 Current limitation:
 
-- service-runtime replication is not implemented yet, so keys whose primary owner fails are not recovered in this phase
+- heartbeat repair is explicit; it is not yet running on a background schedule
 
-The next slice should add service-runtime replication and replica promotion.
+## Service Runtime Replication
+
+Service nodes now replicate primary writes to successor nodes.
+
+Replica endpoints:
+
+```text
+POST /replicas/put?key=...&value=...
+GET  /replicas/local?key=...
+```
+
+Current behavior:
+
+1. A routed `put` lands on the responsible primary owner.
+2. The primary owner writes the local primary value.
+3. The primary owner writes replicas to successor nodes.
+4. If a primary owner fails, heartbeat repair removes it from membership.
+5. Surviving nodes recompute ownership.
+6. A node that now owns a key and has a replica promotes that replica to primary.
+
+The integration tests verify:
+
+```text
+Primary write for key 20 lands on node 30.
+Replicas are written to nodes 65 and 0.
+Node 30 fails.
+Node 0 runs heartbeat repair.
+Node 65 promotes its replica for key 20.
+Lookup for key 20 resolves to node 65.
+```
+
+The next slice should add background heartbeat scheduling and a local cluster launcher.
 
 The storage server and service-node runtime can then be combined into one independently deployable node process.
 

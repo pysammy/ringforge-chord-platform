@@ -122,6 +122,8 @@ Implemented so far:
 - bootstrap join for service nodes
 - deterministic stabilize/notify/membership APIs
 - heartbeat repair for failed service-node membership
+- service-runtime successor replication
+- service-runtime replica promotion after primary-owner failure
 - key rebalancing after service-node membership changes
 - service-level integration tests that route requests across multiple node processes
 - local HTTP API
@@ -222,9 +224,11 @@ GET  /node/finger-table
 GET  /lookup?key=...
 POST /keys/put?key=...&value=...
 GET  /keys/local?key=...
+POST /replicas/put?key=...&value=...
+GET  /replicas/local?key=...
 ```
 
-The current service-node implementation supports deterministic bootstrap join and explicit heartbeat repair. Background heartbeat scheduling and replica recovery in the service runtime are the next service-runtime steps.
+The current service-node implementation supports deterministic bootstrap join, explicit heartbeat repair, successor replication, and replica promotion. Background heartbeat scheduling and process supervision are the next service-runtime steps.
 
 ## Current Reliability Behavior
 

@@ -38,6 +38,8 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         nodeServer.server.createContext("/lookup", nodeServer::lookup);
         nodeServer.server.createContext("/keys/put", nodeServer::put);
         nodeServer.server.createContext("/keys/local", nodeServer::local);
+        nodeServer.server.createContext("/replicas/put", nodeServer::putReplica);
+        nodeServer.server.createContext("/replicas/local", nodeServer::localReplica);
         nodeServer.server.createContext("/node/health", nodeServer::health);
         nodeServer.server.setExecutor(Executors.newFixedThreadPool(6));
         nodeServer.server.start();
@@ -190,6 +192,30 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         }
         int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
         java.util.Optional<String> value = node.getLocal(key);
+        sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
+    }
+
+    private void putReplica(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            Map<String, String> query = query(exchange.getRequestURI());
+            int key = Integer.parseInt(query.getOrDefault("key", "0"));
+            String value = query.getOrDefault("value", "");
+            node.putReplica(key, value);
+            sendJson(exchange, 200, ServiceJson.action("ok", "replica stored"));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void localReplica(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
+        java.util.Optional<String> value = node.getReplica(key);
         sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
     }
 

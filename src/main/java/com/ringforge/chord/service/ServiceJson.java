@@ -41,6 +41,8 @@ final class ServiceJson {
         json.append("\"successor\":").append(node.successorId()).append(',');
         values(json, "keys", node.localKeys());
         json.append(',');
+        values(json, "replicas", node.replicaKeys());
+        json.append(',');
         json.append("\"fingers\":[");
         List<FingerEntry> fingers = node.fingerTable().entries();
         for (int i = 0; i < fingers.size(); i++) {

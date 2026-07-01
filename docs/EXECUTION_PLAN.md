@@ -183,12 +183,14 @@ Current implementation:
 - key rebalancing after service-node membership changes
 - heartbeat repair endpoint that removes unreachable members
 - service tests proving routing avoids failed nodes after repair
+- service-runtime successor replication
+- replica promotion when the primary owner fails
+- service tests proving key availability after primary-owner failure
 
 Remaining work:
 
 - add membership gossip or a control-plane bootstrap service
 - add background heartbeat scheduling
-- add service-runtime replica recovery for keys owned by failed nodes
 - add process supervision scripts
 
 ## Phase 6: Replication

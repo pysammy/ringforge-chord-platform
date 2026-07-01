@@ -42,6 +42,18 @@ public final class ServiceChordClient {
         return Optional.ofNullable(extractJsonString(response, "value"));
     }
 
+    public void putReplica(int key, String value) {
+        request("POST", "/replicas/put?key=" + key + "&value=" + encode(value));
+    }
+
+    public Optional<String> getReplica(int key) {
+        String response = request("GET", "/replicas/local?key=" + key);
+        if (!response.contains("\"found\":true")) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(extractJsonString(response, "value"));
+    }
+
     public List<NodeEndpoint> addMember(NodeEndpoint endpoint) {
         String response = request("POST", "/node/join?nodeId=" + endpoint.nodeId()
                 + "&uri=" + encode(endpoint.baseUri().toString()));

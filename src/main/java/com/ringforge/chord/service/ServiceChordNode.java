@@ -19,22 +19,34 @@ import java.util.Optional;
 import java.util.Set;
 
 public final class ServiceChordNode {
+    private static final int DEFAULT_REPLICATION_FACTOR = 3;
+
     private final int nodeId;
     private final IdentifierRing ring;
     private final KeyValueStore store;
+    private final KeyValueStore replicaStore = new InMemoryKeyValueStore();
     private final FingerTable fingerTable = new FingerTable();
     private final Map<Integer, NodeEndpoint> endpoints = new LinkedHashMap<>();
+    private final int replicationFactor;
     private int predecessorId;
     private int successorId;
 
     public ServiceChordNode(int nodeId, int bitLength) {
-        this(nodeId, bitLength, new InMemoryKeyValueStore());
+        this(nodeId, bitLength, new InMemoryKeyValueStore(), DEFAULT_REPLICATION_FACTOR);
     }
 
     public ServiceChordNode(int nodeId, int bitLength, KeyValueStore store) {
+        this(nodeId, bitLength, store, DEFAULT_REPLICATION_FACTOR);
+    }
+
+    public ServiceChordNode(int nodeId, int bitLength, KeyValueStore store, int replicationFactor) {
         this.nodeId = nodeId;
         this.ring = new IdentifierRing(bitLength);
         this.store = store;
+        if (replicationFactor < 1) {
+            throw new IllegalArgumentException("replicationFactor must be at least 1");
+        }
+        this.replicationFactor = replicationFactor;
         this.predecessorId = nodeId;
         this.successorId = nodeId;
     }
@@ -57,6 +69,10 @@ public final class ServiceChordNode {
 
     public Map<Integer, String> localKeys() {
         return store.snapshot();
+    }
+
+    public Map<Integer, String> replicaKeys() {
+        return replicaStore.snapshot();
     }
 
     public void configureCluster(List<NodeEndpoint> members) {
@@ -154,6 +170,7 @@ public final class ServiceChordNode {
         fingerTable.replaceAll(entries);
 
         if (rebalanceLocalKeys) {
+            promoteOwnedReplicas();
             rebalanceLocalKeys();
         }
     }
@@ -163,6 +180,7 @@ public final class ServiceChordNode {
         List<Integer> nextPath = appendPath(path);
         if (isResponsibleFor(key)) {
             store.put(key, value);
+            replicatePrimary(key, value);
             return;
         }
         forwardPut(nextHop(key, nextPath), key, value, nextPath);
@@ -180,6 +198,14 @@ public final class ServiceChordNode {
 
     public Optional<String> getLocal(int rawKey) {
         return store.get(ring.normalize(rawKey));
+    }
+
+    public void putReplica(int rawKey, String value) {
+        replicaStore.put(ring.normalize(rawKey), value);
+    }
+
+    public Optional<String> getReplica(int rawKey) {
+        return replicaStore.get(ring.normalize(rawKey));
     }
 
     private void propagateMembership(List<NodeEndpoint> members) {
@@ -200,6 +226,20 @@ public final class ServiceChordNode {
                 Optional<String> moved = store.delete(key);
                 if (moved.isPresent()) {
                     put(key, moved.get(), Collections.emptyList());
+                }
+            }
+        }
+    }
+
+    private void promoteOwnedReplicas() {
+        Map<Integer, String> snapshot = replicaStore.snapshot();
+        for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
+            int key = ring.normalize(entry.getKey());
+            if (isResponsibleFor(key) && store.get(key).isEmpty()) {
+                Optional<String> replica = replicaStore.delete(key);
+                if (replica.isPresent()) {
+                    store.put(key, replica.get());
+                    replicatePrimary(key, replica.get());
                 }
             }
         }
@@ -241,6 +281,39 @@ public final class ServiceChordNode {
 
     private ServiceLookupResult forwardLookup(NodeEndpoint endpoint, int key, List<Integer> path) {
         return new ServiceChordClient(endpoint.baseUri()).lookup(key, path);
+    }
+
+    private void replicatePrimary(int key, String value) {
+        for (NodeEndpoint successor : successorsAfter(nodeId, replicaCount())) {
+            if (successor.nodeId() != nodeId) {
+                new ServiceChordClient(successor.baseUri()).putReplica(key, value);
+            }
+        }
+    }
+
+    private int replicaCount() {
+        return Math.min(Math.max(0, replicationFactor - 1), Math.max(0, endpoints.size() - 1));
+    }
+
+    private List<NodeEndpoint> successorsAfter(int startNodeId, int count) {
+        List<NodeEndpoint> ordered = new ArrayList<>(endpoints.values());
+        ordered.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        List<NodeEndpoint> successors = new ArrayList<>();
+        if (ordered.size() <= 1 || count <= 0) {
+            return successors;
+        }
+        int startIndex = 0;
+        for (int i = 0; i < ordered.size(); i++) {
+            if (ordered.get(i).nodeId() == startNodeId) {
+                startIndex = i;
+                break;
+            }
+        }
+        int boundedCount = Math.min(count, ordered.size() - 1);
+        for (int offset = 1; offset <= boundedCount; offset++) {
+            successors.add(ordered.get((startIndex + offset) % ordered.size()));
+        }
+        return successors;
     }
 
     private NodeEndpoint endpoint(int id) {

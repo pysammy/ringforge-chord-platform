@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -41,6 +42,7 @@ public final class ServiceGatewayServer implements AutoCloseable {
         gateway.server.createContext("/api/cluster/snapshot", gateway::snapshot);
         gateway.server.createContext("/api/cluster/ops-report", gateway::opsReport);
         gateway.server.createContext("/metrics", gateway::metrics);
+        gateway.server.createContext("/", gateway::staticAsset);
         gateway.server.setExecutor(Executors.newFixedThreadPool(8));
         gateway.server.start();
         return gateway;
@@ -163,6 +165,34 @@ public final class ServiceGatewayServer implements AutoCloseable {
         } catch (RuntimeException error) {
             sendJson(exchange, 500, error(error.getMessage()));
         }
+    }
+
+    private void staticAsset(HttpExchange exchange) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method not allowed".getBytes(StandardCharsets.UTF_8), "text/plain");
+            return;
+        }
+
+        String path = exchange.getRequestURI().getPath();
+        if ("/".equals(path)) {
+            path = "/service.html";
+        }
+
+        String contentType;
+        if (path.endsWith(".css")) {
+            contentType = "text/css";
+        } else if (path.endsWith(".js")) {
+            contentType = "application/javascript";
+        } else {
+            contentType = "text/html";
+        }
+
+        byte[] data = readResource("/web" + path);
+        if (data == null) {
+            send(exchange, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain");
+            return;
+        }
+        send(exchange, 200, data, contentType);
     }
 
     private ClusterView collect() {
@@ -419,6 +449,15 @@ public final class ServiceGatewayServer implements AutoCloseable {
 
     private static void sendJson(HttpExchange exchange, int status, String json) throws IOException {
         send(exchange, status, json.getBytes(StandardCharsets.UTF_8), "application/json");
+    }
+
+    private static byte[] readResource(String path) throws IOException {
+        try (InputStream input = ServiceGatewayServer.class.getResourceAsStream(path)) {
+            if (input == null) {
+                return null;
+            }
+            return input.readAllBytes();
+        }
     }
 
     private static void send(HttpExchange exchange, int status, byte[] data, String contentType) throws IOException {

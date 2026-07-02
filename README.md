@@ -2,7 +2,7 @@
 
 RingForge is a Java distributed key-placement and routing diagnostics platform based on Chord-style consistent hashing. The project focuses on a practical infrastructure problem: helping engineers understand where data belongs, how lookups are routed, and whether a cluster remains healthy while nodes join, leave, or fail.
 
-The current milestone provides an in-memory Chord ring with node joins, node leaves, finger tables, key insertion, lookup, key migration, health checks, a local API, an engineer-facing browser console, and an HTTP service-node runtime with replication and heartbeat repair.
+The current milestone provides a Chord-based DHT service runtime with node joins, finger tables, key insertion, lookup forwarding, key migration, health checks, an engineer-facing browser console, Redis-backed primary and replica storage, Kafka-backed service events, Docker Compose, and a Docker Desktop Kubernetes deployment path.
 
 ## Why This Project Exists
 
@@ -48,15 +48,15 @@ This project is designed for learning and demonstration across:
 
 ## Non-Goals For The First Version
 
-The first Java version will not try to be production-ready. It will focus on correctness and clean design before distributed networking is introduced.
+The first Java version will not try to be production-ready. It focuses on correctness, explainability, and clean service boundaries before adding production-grade consensus, security, and managed cloud operations.
 
 Initial non-goals:
 
-- no Kubernetes deployment
-- no real persistence engine
 - no cross-datacenter replication
 - no Byzantine fault tolerance
 - no consensus protocol such as Raft or Paxos
+- no authenticated multi-tenant API
+- no managed cloud database or managed Kafka dependency
 
 Those can be explored later if the core system becomes stable.
 
@@ -102,7 +102,7 @@ java -jar target/ringforge-chord-platform.jar
 
 ## Current Status
 
-Status: Java simulation, local API, browser console, and service-node runtime implemented.
+Status: Java simulation, local API, browser console, service-node runtime, Redis storage, Kafka service events, and local container deployment implemented.
 
 Implemented so far:
 
@@ -126,6 +126,8 @@ Implemented so far:
 - service-runtime successor replication
 - service-runtime replica promotion after primary-owner failure
 - key rebalancing after service-node membership changes
+- Redis-backed primary and replica `KeyValueStore` adapter
+- Kafka service-event publisher for joins, writes, lookups, replica writes, repairs, and promotions
 - local service-node process entry point
 - local cluster start and stop scripts
 - DHT service gateway for client-facing reads, writes, snapshots, metrics, and ops reports
@@ -246,6 +248,29 @@ java -cp target/classes com.ringforge.chord.app.ServiceNodeMain \
   --heartbeat-ms 750
 ```
 
+Run a service node with Redis storage and Kafka event publishing:
+
+```bash
+java -cp target/classes com.ringforge.chord.app.ServiceNodeMain \
+  --id 0 \
+  --port 5100 \
+  --heartbeat-ms 750 \
+  --storage redis \
+  --redis-host localhost \
+  --redis-port 6379 \
+  --redis-prefix ringforge:node:0 \
+  --kafka-bootstrap-servers localhost:19092
+```
+
+In Redis mode, each node uses separate namespaces for primary and replica data:
+
+```text
+ringforge:node:<id>:primary:keys
+ringforge:node:<id>:primary:key:<key>
+ringforge:node:<id>:replica:keys
+ringforge:node:<id>:replica:key:<key>
+```
+
 Run a local four-node service cluster:
 
 ```bash
@@ -273,16 +298,16 @@ GET  /api/cluster/ops-report
 GET  /metrics
 ```
 
-The browser console includes a Service Runtime inspector that can point at the gateway URL, defaulting to:
+The gateway also serves a service-focused browser console at its root URL. When running locally:
 
 ```text
 http://localhost:8081
 ```
 
-Container and Kubernetes artifacts:
+Container and Kubernetes artifacts include Redis, Kafka, three independently addressable Chord nodes, and the DHT gateway:
 
 ```bash
-docker build -t ringforge-chord-platform:local .
+docker build -t ringforge-chord-platform:redis-kafka-local .
 GATEWAY_PORT=18081 docker compose -f deploy/docker-compose.yml up --build
 kubectl apply -f deploy/kubernetes/ringforge-demo.yaml
 ```
@@ -293,17 +318,19 @@ The service-node runtime supports deterministic bootstrap join, retry-aware node
 
 ## Current Reliability Behavior
 
-RingForge currently uses in-memory storage, but it already models reliability behavior that production systems care about:
+RingForge now supports both in-memory storage and Redis-backed service-node storage while preserving the deterministic Chord routing logic:
 
 - every primary key is replicated to successor nodes
 - a graceful leave migrates primary keys to the next owner
 - a crash does not use graceful handoff; surviving replicas are promoted
+- Redis stores primary and replica key copies under separate per-node namespaces
+- Kafka records service-runtime events for incident reconstruction and demo verification
 - diagnostics verify routing links, key ownership, and replica count
 - benchmark checks lookup behavior across every active node and primary key
 
-External technologies should attach to those proven seams:
+External technologies attach to system problems, not to a checklist:
 
-- Redis can implement `KeyValueStore`.
-- Kafka can persist the structured event log.
-- Kubernetes manifests run service nodes plus the gateway for a local demo deployment.
-- LLMs receive deterministic gateway ops reports through the prompt-builder boundary.
+- Redis externalizes node-local key storage.
+- Kafka makes the service timeline replayable.
+- Kubernetes proves the runtime can run as independently scheduled processes.
+- LLMs are intentionally paused for now; the deterministic ops-report boundary remains available for a later assistant layer.

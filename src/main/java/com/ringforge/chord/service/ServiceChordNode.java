@@ -4,6 +4,8 @@ import com.ringforge.chord.core.ChordNode;
 import com.ringforge.chord.core.FingerEntry;
 import com.ringforge.chord.core.FingerTable;
 import com.ringforge.chord.core.IdentifierRing;
+import com.ringforge.chord.events.NoopServiceEventPublisher;
+import com.ringforge.chord.events.ServiceEventPublisher;
 import com.ringforge.chord.storage.InMemoryKeyValueStore;
 import com.ringforge.chord.storage.KeyValueStore;
 
@@ -24,9 +26,10 @@ public final class ServiceChordNode {
     private final int nodeId;
     private final IdentifierRing ring;
     private final KeyValueStore store;
-    private final KeyValueStore replicaStore = new InMemoryKeyValueStore();
+    private final KeyValueStore replicaStore;
     private final FingerTable fingerTable = new FingerTable();
     private final Map<Integer, NodeEndpoint> endpoints = new LinkedHashMap<>();
+    private final ServiceEventPublisher eventPublisher;
     private final int replicationFactor;
     private int predecessorId;
     private int successorId;
@@ -40,9 +43,21 @@ public final class ServiceChordNode {
     }
 
     public ServiceChordNode(int nodeId, int bitLength, KeyValueStore store, int replicationFactor) {
+        this(nodeId, bitLength, store, new InMemoryKeyValueStore(), replicationFactor, new NoopServiceEventPublisher());
+    }
+
+    public ServiceChordNode(int nodeId, int bitLength, KeyValueStore store, int replicationFactor,
+                            ServiceEventPublisher eventPublisher) {
+        this(nodeId, bitLength, store, new InMemoryKeyValueStore(), replicationFactor, eventPublisher);
+    }
+
+    public ServiceChordNode(int nodeId, int bitLength, KeyValueStore store, KeyValueStore replicaStore,
+                            int replicationFactor, ServiceEventPublisher eventPublisher) {
         this.nodeId = nodeId;
         this.ring = new IdentifierRing(bitLength);
         this.store = store;
+        this.replicaStore = replicaStore == null ? new InMemoryKeyValueStore() : replicaStore;
+        this.eventPublisher = eventPublisher == null ? new NoopServiceEventPublisher() : eventPublisher;
         if (replicationFactor < 1) {
             throw new IllegalArgumentException("replicationFactor must be at least 1");
         }
@@ -83,6 +98,7 @@ public final class ServiceChordNode {
         List<NodeEndpoint> members = new ServiceChordClient(bootstrapEndpoint.baseUri()).addMember(selfEndpoint);
         configureCluster(members, false);
         propagateMembership(members);
+        publish("NODE_JOINED", details("nodeId", String.valueOf(nodeId), "bootstrap", bootstrapEndpoint.baseUri().toString()));
     }
 
     public synchronized List<NodeEndpoint> members() {
@@ -96,6 +112,7 @@ public final class ServiceChordNode {
         members.removeIf(member -> member.nodeId() == endpoint.nodeId());
         members.add(endpoint);
         configureCluster(members, false);
+        publish("NODE_JOINED", details("nodeId", String.valueOf(endpoint.nodeId()), "uri", endpoint.baseUri().toString()));
         return members();
     }
 
@@ -133,6 +150,7 @@ public final class ServiceChordNode {
         if (!failed.isEmpty()) {
             configureCluster(survivors, true);
             propagateMembership(survivors);
+            publish("RING_REPAIRED", details("failedNodeIds", failed.toString(), "memberCount", String.valueOf(survivors.size())));
         }
         return Collections.unmodifiableList(failed);
     }
@@ -181,6 +199,7 @@ public final class ServiceChordNode {
         if (isResponsibleFor(key)) {
             store.put(key, value);
             replicatePrimary(key, value);
+            publish("KEY_STORED", details("key", String.valueOf(key), "role", "primary"));
             return;
         }
         forwardPut(nextHop(key, nextPath), key, value, nextPath);
@@ -191,6 +210,8 @@ public final class ServiceChordNode {
         List<Integer> nextPath = appendPath(path);
         if (isResponsibleFor(key)) {
             Optional<String> value = store.get(key);
+            publish("LOOKUP_COMPLETED", details("key", String.valueOf(key), "found", String.valueOf(value.isPresent()),
+                    "responsibleNodeId", String.valueOf(nodeId), "path", nextPath.toString()));
             return new ServiceLookupResult(key, value.isPresent(), value.orElse(null), nodeId, nextPath);
         }
         return forwardLookup(nextHop(key, nextPath), key, nextPath);
@@ -201,7 +222,9 @@ public final class ServiceChordNode {
     }
 
     public void putReplica(int rawKey, String value) {
-        replicaStore.put(ring.normalize(rawKey), value);
+        int key = ring.normalize(rawKey);
+        replicaStore.put(key, value);
+        publish("REPLICA_WRITTEN", details("key", String.valueOf(key), "role", "replica"));
     }
 
     public Optional<String> getReplica(int rawKey) {
@@ -240,6 +263,7 @@ public final class ServiceChordNode {
                 if (replica.isPresent()) {
                     store.put(key, replica.get());
                     replicatePrimary(key, replica.get());
+                    publish("REPLICA_PROMOTED", details("key", String.valueOf(key), "newOwnerId", String.valueOf(nodeId)));
                 }
             }
         }
@@ -289,6 +313,22 @@ public final class ServiceChordNode {
                 new ServiceChordClient(successor.baseUri()).putReplica(key, value);
             }
         }
+    }
+
+    private void publish(String type, Map<String, String> details) {
+        try {
+            eventPublisher.publish(type, details);
+        } catch (RuntimeException ignored) {
+            // Event publishing must not affect DHT correctness.
+        }
+    }
+
+    private static Map<String, String> details(String... pairs) {
+        Map<String, String> details = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            details.put(pairs[i], pairs[i + 1]);
+        }
+        return details;
     }
 
     private int replicaCount() {

@@ -3,7 +3,12 @@ package com.ringforge.chord.app;
 import com.ringforge.chord.service.NodeEndpoint;
 import com.ringforge.chord.service.ServiceChordNode;
 import com.ringforge.chord.service.ServiceChordNodeServer;
+import com.ringforge.chord.events.KafkaServiceEventPublisher;
+import com.ringforge.chord.events.NoopServiceEventPublisher;
+import com.ringforge.chord.events.ServiceEventPublisher;
 import com.ringforge.chord.storage.InMemoryKeyValueStore;
+import com.ringforge.chord.storage.KeyValueStore;
+import com.ringforge.chord.storage.RedisKeyValueStore;
 
 import java.net.URI;
 import java.util.Collections;
@@ -26,8 +31,11 @@ public final class ServiceNodeMain {
         long joinRetryMillis = longOption(options, "join-retry-ms", 1_000L);
         String host = options.getOrDefault("host", "localhost");
         String joinUri = options.get("join");
+        KeyValueStore store = store(options, nodeId, "primary");
+        KeyValueStore replicaStore = store(options, nodeId, "replica");
+        ServiceEventPublisher eventPublisher = eventPublisher(options, nodeId);
 
-        ServiceChordNode node = new ServiceChordNode(nodeId, bitLength, new InMemoryKeyValueStore(), replicationFactor);
+        ServiceChordNode node = new ServiceChordNode(nodeId, bitLength, store, replicaStore, replicationFactor, eventPublisher);
         ServiceChordNodeServer server = ServiceChordNodeServer.start(node, port, heartbeatMillis);
         NodeEndpoint self = new NodeEndpoint(nodeId, URI.create("http://" + host + ":" + server.port()));
 
@@ -48,9 +56,30 @@ public final class ServiceNodeMain {
         CountDownLatch stopped = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             server.close();
+            eventPublisher.close();
             stopped.countDown();
         }, "ringforge-service-node-shutdown"));
         stopped.await();
+    }
+
+    private static KeyValueStore store(Map<String, String> options, int nodeId, String role) {
+        String storage = options.getOrDefault("storage", "memory");
+        if ("redis".equalsIgnoreCase(storage)) {
+            String host = options.getOrDefault("redis-host", "localhost");
+            int port = intOption(options, "redis-port", 6379);
+            String prefix = options.getOrDefault("redis-prefix", "ringforge:node:" + nodeId);
+            return new RedisKeyValueStore(host, port, prefix + ":" + role);
+        }
+        return new InMemoryKeyValueStore();
+    }
+
+    private static ServiceEventPublisher eventPublisher(Map<String, String> options, int nodeId) {
+        String bootstrapServers = options.get("kafka-bootstrap-servers");
+        if (bootstrapServers == null || bootstrapServers.trim().isEmpty()) {
+            return new NoopServiceEventPublisher();
+        }
+        String topic = options.getOrDefault("kafka-topic", "ringforge.events");
+        return new KafkaServiceEventPublisher(bootstrapServers, topic, nodeId);
     }
 
     private static void joinWithRetry(ServiceChordNode node, NodeEndpoint self, URI joinUri,

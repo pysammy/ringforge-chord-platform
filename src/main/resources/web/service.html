@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RingForge DHT Service</title>
+  <link rel="stylesheet" href="/service-styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>RingForge DHT Service</h1>
+        <p>Chord routing with externalized storage, service events, and independently deployed nodes</p>
+      </div>
+      <div id="statusStrip" class="status-strip">
+        <span>Loading</span>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <section class="workbench">
+        <div class="controls">
+          <label>
+            Key
+            <input id="keyInput" type="number" min="0" max="255" value="45">
+          </label>
+          <label>
+            Value
+            <input id="valueInput" type="text" value="k8s-redis-kafka-check">
+          </label>
+          <button id="putButton">Write</button>
+          <button id="getButton">Read</button>
+          <button id="refreshButton">Refresh</button>
+        </div>
+
+        <div class="canvas-panel">
+          <canvas id="ringCanvas" width="900" height="460"></canvas>
+        </div>
+
+        <div id="lookupResult" class="lookup-result">No lookup yet.</div>
+      </section>
+
+      <aside class="side-panel">
+        <section>
+          <h2>Runtime Scope</h2>
+          <div class="scope-grid">
+            <div><strong>Routing</strong><span>Chord service nodes</span></div>
+            <div><strong>Storage</strong><span>Redis primary and replica stores</span></div>
+            <div><strong>Events</strong><span>Kafka service topic</span></div>
+            <div><strong>Deploy</strong><span>Docker Desktop Kubernetes</span></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Cluster Metrics</h2>
+          <div id="metricGrid" class="metric-grid"></div>
+        </section>
+
+        <section>
+          <h2>Node Storage</h2>
+          <div id="nodeList" class="node-list"></div>
+        </section>
+
+        <section>
+          <h2>Ops Report</h2>
+          <div id="opsReport" class="ops-report"></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/service-app.js"></script>
+</body>
+</html>

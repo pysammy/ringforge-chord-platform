@@ -8,20 +8,22 @@ Problem solved:
 
 - durable or externalized per-node key-value storage
 
-Current seam:
+Implemented seam:
 
 - `KeyValueStore`
 - `InMemoryKeyValueStore`
 - `HttpKeyValueStore`
 - `NodeStorageServer`
+- `RedisKeyValueStore`
 
-Future adapter:
+Chord remains responsible for ownership and routing. Redis stores the local node's primary and replica data under separate namespaces:
 
 ```text
-RedisKeyValueStore
+ringforge:node:<id>:primary:keys
+ringforge:node:<id>:primary:key:<key>
+ringforge:node:<id>:replica:keys
+ringforge:node:<id>:replica:key:<key>
 ```
-
-Chord remains responsible for ownership and routing. Redis only stores the local node's primary and replica data.
 
 ## Kafka
 
@@ -32,19 +34,18 @@ Problem solved:
 - benchmark comparison
 - LLM-ready operational context
 
-Current seam:
+Implemented seam:
 
 - `EventLog`
 - `RingEvent`
 - `EventType`
-
-Future adapter:
-
-```text
-KafkaEventPublisher
-```
+- `ServiceEventPublisher`
+- `KafkaServiceEventPublisher`
+- `NoopServiceEventPublisher`
 
 The in-memory event log should remain useful for tests. Kafka should be an additional publisher, not a replacement for deterministic correctness.
+
+The service runtime publishes Kafka events for joins, primary writes, lookups, replica writes, repairs, and replica promotions. Event publishing is intentionally best-effort: a Kafka outage must not break key placement or lookup correctness.
 
 ## Kubernetes
 

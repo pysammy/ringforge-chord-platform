@@ -1,7 +1,43 @@
 services:
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_NUM_PARTITIONS: "1"
+    ports:
+      - "${KAFKA_PORT:-19092}:9092"
+
+  redis-0:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS0_PORT:-16379}:6379"
+
+  redis-30:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS30_PORT:-16380}:6379"
+
+  redis-65:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS65_PORT:-16381}:6379"
+
   node-0:
     build:
       context: ..
+    depends_on:
+      - kafka
+      - redis-0
     command:
       - com.ringforge.chord.app.ServiceNodeMain
       - --id
@@ -12,6 +48,14 @@ services:
       - node-0
       - --heartbeat-ms
       - "750"
+      - --storage
+      - redis
+      - --redis-host
+      - redis-0
+      - --redis-prefix
+      - ringforge:node:0
+      - --kafka-bootstrap-servers
+      - kafka:9092
     ports:
       - "${NODE0_PORT:-5100}:5100"
 
@@ -20,6 +64,8 @@ services:
       context: ..
     depends_on:
       - node-0
+      - kafka
+      - redis-30
     command:
       - com.ringforge.chord.app.ServiceNodeMain
       - --id
@@ -32,6 +78,14 @@ services:
       - http://node-0:5100
       - --heartbeat-ms
       - "750"
+      - --storage
+      - redis
+      - --redis-host
+      - redis-30
+      - --redis-prefix
+      - ringforge:node:30
+      - --kafka-bootstrap-servers
+      - kafka:9092
     ports:
       - "${NODE30_PORT:-5101}:5100"
 
@@ -41,6 +95,8 @@ services:
     depends_on:
       - node-0
       - node-30
+      - kafka
+      - redis-65
     command:
       - com.ringforge.chord.app.ServiceNodeMain
       - --id
@@ -53,6 +109,14 @@ services:
       - http://node-0:5100
       - --heartbeat-ms
       - "750"
+      - --storage
+      - redis
+      - --redis-host
+      - redis-65
+      - --redis-prefix
+      - ringforge:node:65
+      - --kafka-bootstrap-servers
+      - kafka:9092
     ports:
       - "${NODE65_PORT:-5102}:5100"
 

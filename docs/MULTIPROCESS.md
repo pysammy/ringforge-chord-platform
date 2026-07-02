@@ -229,10 +229,16 @@ The storage server and service-node runtime can then be combined into one indepe
 
 ## Why This Matters
 
-This avoids pretending Kubernetes or Redis makes the system distributed. The project first proves the boundary:
+This avoids pretending Kubernetes or Redis makes the system distributed. The project first proved the boundary:
 
 ```text
 Chord routing logic -> KeyValueStore interface -> HTTP-backed node storage
 ```
 
-Once that boundary is stable, Redis can replace the HTTP storage server, and Kubernetes can run each node process independently.
+With that boundary stable, the service runtime now also supports:
+
+```text
+Chord routing logic -> KeyValueStore interface -> Redis-backed node storage
+Chord service events -> Kafka event topic
+independent service nodes + gateway -> Docker Compose / Kubernetes
+```

@@ -333,11 +333,45 @@ Current implementation:
 - reports lookup count, node count, key count, average hops, max hops, and health
 - deterministic churn test repeatedly performs joins, leaves, writes, repairs, and read verification
 
-## Phase 10: LLM-Assisted Operations
+## Phase 10: Redis, Kafka, And Local Deployment
+
+Goal: make the service runtime credible outside JVM memory by externalizing storage, recording service events, and validating the system in containers.
+
+Status: implemented for the local milestone.
+
+Problem being solved:
+
+- Chord decides key ownership and lookup routing.
+- Redis stores each node's primary and replica key data outside the Java process.
+- Kafka records a replayable stream of service events for joins, writes, lookups, replica writes, repairs, and promotions.
+- Docker Compose and Docker Desktop Kubernetes run each node as an independently addressable service.
+
+Current implementation:
+
+- `RedisKeyValueStore` implements the existing `KeyValueStore` interface.
+- `ServiceChordNode` accepts separate primary and replica stores.
+- `ServiceNodeMain` supports `--storage redis`, Redis host/port/prefix options, and Kafka bootstrap/topic options.
+- Redis namespaces separate primary and replica copies:
+
+```text
+ringforge:node:<id>:primary:...
+ringforge:node:<id>:replica:...
+```
+
+- `KafkaServiceEventPublisher` publishes best-effort service events without affecting DHT correctness.
+- Docker Compose starts Kafka, three Redis instances, three Chord service nodes, and the gateway.
+- Kubernetes manifests deploy the same topology on Docker Desktop Kubernetes.
+
+Validation:
+
+- JUnit tests verify routing, finger shortcuts, bootstrap join, heartbeat repair, successor replication, and replica promotion.
+- Deployment smoke tests verify gateway writes/reads, Redis primary/replica placement, Kafka events, metrics, ops reports, and failover reads after scaling a node down.
+
+## Phase 11: LLM-Assisted Operations
 
 Goal: use LLMs in a practical, backend-relevant way without making them part of the core correctness path.
 
-Status: deterministic ops-advice layer and LLM-safe prompt boundary complete; external LLM API call is intentionally optional.
+Status: deterministic ops-advice layer and LLM-safe prompt boundary complete; external LLM API call is intentionally paused until the Redis/Kafka/deployment path is stable.
 
 Possible features:
 
@@ -365,4 +399,4 @@ Current implementation:
 
 Target project description:
 
-> Built RingForge, a Java distributed key-value platform based on Chord DHT routing. Implemented dynamic node joins/leaves, finger-table stabilization, successor replication, heartbeat-based failure detection, multi-process local clustering, Prometheus-style metrics, and randomized simulation tests for churn and lookup correctness. Added an optional LLM operations assistant for explaining cluster health, failed lookups, and benchmark results.
+> Built RingForge, a Java distributed key-value platform based on Chord DHT routing. Implemented dynamic node joins/leaves, finger-table routing, successor replication, heartbeat-based failure detection, multi-process local clustering, Redis-backed primary and replica storage, Kafka-backed service events, Docker/Kubernetes deployment artifacts, Prometheus-style metrics, and deterministic tests for churn, routing, failover, and lookup correctness.

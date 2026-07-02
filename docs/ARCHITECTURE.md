@@ -74,15 +74,11 @@ This class should not exist in the same form once the project becomes multi-proc
 
 Local storage abstraction.
 
-Initial implementation:
+Implementations:
 
 - in-memory map
-
-Future implementation options:
-
-- file-backed store
-- RocksDB
-- SQLite
+- HTTP-backed remote storage for transport-boundary tests
+- Redis-backed primary and replica stores for the service runtime
 
 ### `LookupResult`
 
@@ -113,6 +109,8 @@ com.ringforge.chord.core
 com.ringforge.chord.storage
   KeyValueStore
   InMemoryKeyValueStore
+  HttpKeyValueStore
+  RedisKeyValueStore
 
 com.ringforge.chord.simulation
   ChordRing
@@ -127,6 +125,11 @@ com.ringforge.chord.service
   node-to-node forwarding
   heartbeat repair
   successor replication
+
+com.ringforge.chord.events
+  service event publisher interface
+  no-op test publisher
+  Kafka-backed service event publisher
 
 com.ringforge.chord.metrics
   benchmark report models
@@ -245,6 +248,17 @@ GET  /metrics
 
 The gateway does not decide ownership. It delegates reads and writes to the Chord service nodes, then aggregates deterministic state for engineers, dashboards, metrics, and optional LLM explanations.
 
+### Stage 6: Externalized Storage And Event Stream
+
+Each service node can store primary and replica copies in Redis while Kafka receives best-effort service events.
+
+Useful for:
+
+- proving ownership and replica placement outside JVM memory
+- replaying joins, writes, lookups, repairs, and promotions
+- demonstrating infrastructure behavior in Docker Compose and Kubernetes
+- keeping routing correctness independent from storage and event vendors
+
 ## Major Technical Risks
 
 ### Stale Routing Entries
@@ -278,7 +292,7 @@ value: ...
 
 The project should not start with networking, persistence, replication, and LLMs all at once.
 
-The correct order is:
+The implemented order is:
 
 1. correct simulation
 2. strong tests
@@ -286,4 +300,7 @@ The correct order is:
 4. networking
 5. replication
 6. observability
-7. LLM assistant
+7. Redis storage
+8. Kafka event stream
+9. Docker and Kubernetes deployment
+10. optional LLM assistant

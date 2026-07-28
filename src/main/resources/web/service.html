@@ -31,6 +31,7 @@
           </label>
           <button id="putButton">Write</button>
           <button id="getButton">Read</button>
+          <button id="deleteButton">Delete</button>
           <button id="refreshButton">Refresh</button>
         </div>
 
@@ -53,6 +54,14 @@
         </section>
 
         <section>
+          <h2>Failure Demo</h2>
+          <div class="runbook">
+            <code>kubectl --context docker-desktop -n ringforge-demo scale deployment/ringforge-node-65 --replicas=0</code>
+            <span>Refresh, then read key 45. A surviving replica should be promoted and remain readable.</span>
+          </div>
+        </section>
+
+        <section>
           <h2>Cluster Metrics</h2>
           <div id="metricGrid" class="metric-grid"></div>
         </section>
@@ -65,6 +74,11 @@
         <section>
           <h2>Ops Report</h2>
           <div id="opsReport" class="ops-report"></div>
+        </section>
+
+        <section>
+          <h2>Kafka Audit</h2>
+          <div id="auditEvents" class="audit-events"></div>
         </section>
       </aside>
     </main>

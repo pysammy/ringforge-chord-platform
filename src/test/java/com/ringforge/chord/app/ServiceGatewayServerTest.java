@@ -59,6 +59,12 @@ class ServiceGatewayServerTest {
                 String opsReport = request("GET", base.resolve("/api/cluster/ops-report"));
                 assertTrue(opsReport.contains("\"summary\""));
                 assertTrue(opsReport.contains("\"llmContext\""));
+
+                String deleted = request("POST", base.resolve("/api/dht/delete?key=45"));
+                assertTrue(deleted.contains("\"deleted\":true"));
+
+                String missing = request("GET", base.resolve("/api/dht/get?key=45"));
+                assertTrue(missing.contains("\"found\":false"));
             }
         }
     }

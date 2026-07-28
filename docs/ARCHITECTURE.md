@@ -255,9 +255,20 @@ Each service node can store primary and replica copies in Redis while Kafka rece
 Useful for:
 
 - proving ownership and replica placement outside JVM memory
-- replaying joins, writes, lookups, repairs, and promotions
+- replaying joins, writes, deletes, lookups, repairs, read repairs, and promotions
 - demonstrating infrastructure behavior in Docker Compose and Kubernetes
 - keeping routing correctness independent from storage and event vendors
+
+The service runtime stores values as versioned internal records. Public APIs still return the user value, while node state includes metadata:
+
+```text
+value
+version
+ownerNodeId
+timestamp
+```
+
+That lets Redis prove more than persistence: it shows which node produced a record, which version is current, and whether replicas have caught up.
 
 ## Major Technical Risks
 

@@ -39,6 +39,8 @@ Smoke test:
 curl http://localhost:18081/api/cluster/members
 curl -X POST 'http://localhost:18081/api/dht/put?key=45&value=compose-check'
 curl 'http://localhost:18081/api/dht/get?key=45'
+curl -X POST 'http://localhost:18081/api/dht/delete?key=45'
+curl http://localhost:18081/api/audit/events?limit=20
 curl http://localhost:18081/metrics
 curl http://localhost:18081/api/cluster/ops-report
 ```
@@ -51,7 +53,7 @@ http://localhost:18081
 
 Verify Redis storage for key `45`.
 
-Key `45` belongs to node `65` in the default three-node ring, so its primary copy should be in `redis-65`. Its replicas should be in successor replica namespaces on nodes `0` and `30`.
+Key `45` belongs to node `65` in the default three-node ring, so its primary copy should be in `redis-65`. Its replicas should be in successor replica namespaces on nodes `0` and `30`. Redis stores versioned internal records, so values start with `rfv1|`; the public gateway API still returns the plain user value.
 
 ```bash
 docker compose -f deploy/docker-compose.yml exec redis-65 redis-cli GET ringforge:node:65:primary:key:45
@@ -183,6 +185,15 @@ If using an existing cluster, do not delete the cluster unless it was created on
 
 This is the recommended local path when Docker Desktop Kubernetes is enabled.
 
+The script-first path is:
+
+```bash
+scripts/deploy-docker-desktop-k8s.sh
+scripts/smoke-test-k8s.sh
+```
+
+The smoke test verifies membership, write/read routing, Redis primary and replica records, Kafka audit events, failover promotion, restore, and distributed delete.
+
 Make sure the active Kubernetes context is Docker Desktop:
 
 ```bash
@@ -282,6 +293,7 @@ Smoke test from another terminal:
 curl http://localhost:18082/api/cluster/members
 curl -X POST 'http://localhost:18082/api/dht/put?key=45&value=k8s-redis-kafka-check'
 curl 'http://localhost:18082/api/dht/get?key=45'
+curl http://localhost:18082/api/audit/events?limit=20
 curl http://localhost:18082/metrics
 curl http://localhost:18082/api/cluster/ops-report
 ```
@@ -330,6 +342,18 @@ Expected result:
 - key `45` remains readable from a promoted replica
 - metrics still report reachable service nodes and key counts
 
+Delete test:
+
+```bash
+curl -X POST 'http://localhost:18082/api/dht/delete?key=45'
+curl 'http://localhost:18082/api/dht/get?key=45'
+```
+
+Expected result:
+
+- delete reports `deleted:true`
+- the follow-up lookup reports `found:false`
+
 Restore:
 
 ```bash
@@ -340,5 +364,5 @@ kubectl --context docker-desktop -n ringforge-demo rollout status deployment/rin
 Cleanup:
 
 ```bash
-kubectl --context docker-desktop delete namespace ringforge-demo
+scripts/cleanup-k8s.sh
 ```

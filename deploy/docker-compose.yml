@@ -133,5 +133,7 @@ services:
       - "8081"
       - --bootstrap
       - http://node-0:5100
+      - --kafka-bootstrap-servers
+      - kafka:9092
     ports:
       - "${GATEWAY_PORT:-8081}:8081"

@@ -25,6 +25,8 @@ ringforge:node:<id>:replica:keys
 ringforge:node:<id>:replica:key:<key>
 ```
 
+The stored Redis value is an internal versioned record. The gateway and node APIs decode that record and return the plain user value.
+
 ## Kafka
 
 Problem solved:
@@ -41,11 +43,12 @@ Implemented seam:
 - `EventType`
 - `ServiceEventPublisher`
 - `KafkaServiceEventPublisher`
+- `KafkaEventReader`
 - `NoopServiceEventPublisher`
 
 The in-memory event log should remain useful for tests. Kafka should be an additional publisher, not a replacement for deterministic correctness.
 
-The service runtime publishes Kafka events for joins, primary writes, lookups, replica writes, repairs, and replica promotions. Event publishing is intentionally best-effort: a Kafka outage must not break key placement or lookup correctness.
+The service runtime publishes Kafka events for joins, primary writes, deletes, lookups, replica writes/deletes, read repairs, repairs, and replica promotions. The gateway exposes recent events at `/api/audit/events`. Event publishing is intentionally best-effort: a Kafka outage must not break key placement or lookup correctness.
 
 ## Kubernetes
 

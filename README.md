@@ -124,10 +124,13 @@ Implemented so far:
 - heartbeat repair for failed service-node membership
 - background heartbeat scheduling for service-node repair
 - service-runtime successor replication
+- service-runtime distributed delete across primary and replica stores
+- service-runtime read repair for missing or stale successor replicas
+- versioned value records stored behind the API value boundary
 - service-runtime replica promotion after primary-owner failure
 - key rebalancing after service-node membership changes
 - Redis-backed primary and replica `KeyValueStore` adapter
-- Kafka service-event publisher for joins, writes, lookups, replica writes, repairs, and promotions
+- Kafka service-event publisher and gateway audit reader for joins, writes, deletes, lookups, replica writes, repairs, and promotions
 - local service-node process entry point
 - local cluster start and stop scripts
 - DHT service gateway for client-facing reads, writes, snapshots, metrics, and ops reports
@@ -233,9 +236,12 @@ GET  /node/predecessor
 GET  /node/finger-table
 GET  /lookup?key=...
 POST /keys/put?key=...&value=...
+POST /keys/delete?key=...
 GET  /keys/local?key=...
 POST /replicas/put?key=...&value=...
+POST /replicas/delete?key=...
 GET  /replicas/local?key=...
+GET  /replicas/record?key=...
 ```
 
 Run a service node process:
@@ -292,6 +298,8 @@ Gateway endpoints:
 ```text
 POST /api/dht/put?key=...&value=...
 GET  /api/dht/get?key=...
+POST /api/dht/delete?key=...
+GET  /api/audit/events?limit=...
 GET  /api/cluster/members
 GET  /api/cluster/snapshot
 GET  /api/cluster/ops-report
@@ -307,9 +315,8 @@ http://localhost:8081
 Container and Kubernetes artifacts include Redis, Kafka, three independently addressable Chord nodes, and the DHT gateway:
 
 ```bash
-docker build -t ringforge-chord-platform:redis-kafka-local .
-GATEWAY_PORT=18081 docker compose -f deploy/docker-compose.yml up --build
-kubectl apply -f deploy/kubernetes/ringforge-demo.yaml
+scripts/deploy-docker-desktop-k8s.sh
+scripts/smoke-test-k8s.sh
 ```
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the validated Docker Compose and Kubernetes smoke-test flow.
@@ -321,10 +328,12 @@ The service-node runtime supports deterministic bootstrap join, retry-aware node
 RingForge now supports both in-memory storage and Redis-backed service-node storage while preserving the deterministic Chord routing logic:
 
 - every primary key is replicated to successor nodes
+- successful reads repair missing or stale successor replicas
+- deletes remove the primary copy and known successor replicas
 - a graceful leave migrates primary keys to the next owner
 - a crash does not use graceful handoff; surviving replicas are promoted
-- Redis stores primary and replica key copies under separate per-node namespaces
-- Kafka records service-runtime events for incident reconstruction and demo verification
+- Redis stores versioned primary and replica key records under separate per-node namespaces
+- Kafka records service-runtime events and the gateway exposes them through `/api/audit/events`
 - diagnostics verify routing links, key ownership, and replica count
 - benchmark checks lookup behavior across every active node and primary key
 

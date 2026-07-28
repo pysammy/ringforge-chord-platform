@@ -349,5 +349,7 @@ spec:
             - "8081"
             - --bootstrap
             - http://ringforge-node-0:5100
+            - --kafka-bootstrap-servers
+            - ringforge-kafka:9092
           ports:
             - containerPort: 8081

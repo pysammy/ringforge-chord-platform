@@ -34,6 +34,14 @@ public final class ServiceChordClient {
         request("POST", "/keys/put?key=" + key + "&value=" + encode(value) + "&path=" + encodePath(path));
     }
 
+    public Optional<String> delete(int key, List<Integer> path) {
+        String response = request("POST", "/keys/delete?key=" + key + "&path=" + encodePath(path));
+        if (!response.contains("\"found\":true")) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(extractJsonString(response, "value"));
+    }
+
     public Optional<String> getLocal(int key) {
         String response = request("GET", "/keys/local?key=" + key);
         if (!response.contains("\"found\":true")) {
@@ -46,8 +54,28 @@ public final class ServiceChordClient {
         request("POST", "/replicas/put?key=" + key + "&value=" + encode(value));
     }
 
+    public void putReplicaRecord(int key, String record) {
+        request("POST", "/replicas/put?key=" + key + "&record=" + encode(record));
+    }
+
     public Optional<String> getReplica(int key) {
         String response = request("GET", "/replicas/local?key=" + key);
+        if (!response.contains("\"found\":true")) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(extractJsonString(response, "value"));
+    }
+
+    public Optional<String> getReplicaRecord(int key) {
+        String response = request("GET", "/replicas/record?key=" + key);
+        if (!response.contains("\"found\":true")) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(extractJsonString(response, "value"));
+    }
+
+    public Optional<String> deleteReplica(int key) {
+        String response = request("POST", "/replicas/delete?key=" + key);
         if (!response.contains("\"found\":true")) {
             return Optional.empty();
         }
@@ -173,11 +201,12 @@ public final class ServiceChordClient {
 
     private static String encodePath(List<Integer> path) {
         StringBuilder value = new StringBuilder();
-        for (int i = 0; i < path.size(); i++) {
+        List<Integer> safePath = path == null ? java.util.Collections.emptyList() : path;
+        for (int i = 0; i < safePath.size(); i++) {
             if (i > 0) {
                 value.append(',');
             }
-            value.append(path.get(i));
+            value.append(safePath.get(i));
         }
         return encode(value.toString());
     }
@@ -206,7 +235,14 @@ public final class ServiceChordClient {
         if (fieldStart < 0) {
             return null;
         }
-        int valueStart = json.indexOf('"', fieldStart + field.length());
+        int rawValueStart = fieldStart + field.length();
+        while (rawValueStart < json.length() && Character.isWhitespace(json.charAt(rawValueStart))) {
+            rawValueStart++;
+        }
+        if (json.startsWith("null", rawValueStart)) {
+            return null;
+        }
+        int valueStart = json.indexOf('"', rawValueStart);
         if (valueStart < 0) {
             return null;
         }

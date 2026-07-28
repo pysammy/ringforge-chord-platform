@@ -1,6 +1,7 @@
 const state = {
   snapshot: null,
   opsReport: null,
+  audit: null,
   lookup: null,
 };
 
@@ -16,12 +17,14 @@ async function requestJson(path, options = {}) {
 }
 
 async function refresh() {
-  const [snapshot, opsReport] = await Promise.all([
+  const [snapshot, opsReport, audit] = await Promise.all([
     requestJson("/api/cluster/snapshot"),
     requestJson("/api/cluster/ops-report"),
+    requestJson("/api/audit/events?limit=12").catch(() => ({ enabled: false, events: [] })),
   ]);
   state.snapshot = snapshot;
   state.opsReport = opsReport;
+  state.audit = audit;
   render();
 }
 
@@ -42,11 +45,31 @@ async function readKey() {
   drawRing();
 }
 
+async function deleteKey() {
+  const key = document.getElementById("keyInput").value || "45";
+  const result = await requestJson(`/api/dht/delete?key=${encodeURIComponent(key)}`, {
+    method: "POST",
+  });
+  state.lookup = {
+    key: Number(key),
+    found: false,
+    value: result.deleted ? result.value : "missing",
+    responsibleNodeId: null,
+    path: [],
+  };
+  await refresh();
+  document.getElementById("lookupResult").innerHTML = `
+    <div><strong>Key ${escapeHtml(String(key))}</strong> delete ${result.deleted ? "removed a stored value" : "found no stored value"}</div>
+    <div>Previous value: <strong>${escapeHtml(String(result.value || "missing"))}</strong></div>
+  `;
+}
+
 function render() {
   renderStatus();
   renderMetrics();
   renderNodes();
   renderOps();
+  renderAudit();
   drawRing();
 }
 
@@ -82,6 +105,8 @@ function renderNodes() {
     const nodeState = node.state || {};
     const keys = formatEntries(nodeState.keys || {}, "empty");
     const replicas = formatEntries(nodeState.replicas || {}, "none");
+    const keyMeta = formatMetadata(nodeState.keyMetadata || {}, "no primary metadata");
+    const replicaMeta = formatMetadata(nodeState.replicaMetadata || {}, "no replica metadata");
     const status = node.reachable ? "reachable" : "unreachable";
     return `
       <div class="node-row">
@@ -91,9 +116,32 @@ function renderNodes() {
         </div>
         <div class="kv">primary: ${keys}</div>
         <div class="kv">replica: ${replicas}</div>
+        <div class="meta">primary metadata: ${keyMeta}</div>
+        <div class="meta">replica metadata: ${replicaMeta}</div>
       </div>
     `;
   }).join("") || "<div class=\"node-row\">No nodes returned.</div>";
+}
+
+function renderAudit() {
+  const target = document.getElementById("auditEvents");
+  const audit = state.audit || { enabled: false, events: [] };
+  if (!audit.enabled) {
+    target.innerHTML = "<div class=\"audit-row\">Kafka audit is disabled for this gateway run.</div>";
+    return;
+  }
+  const events = audit.events || [];
+  target.innerHTML = events.slice().reverse().map((event) => {
+    const type = event.type || "EVENT";
+    const key = event.key ? `key ${event.key}` : `node ${event.nodeId || event.sourceNodeId || "n/a"}`;
+    const detail = event.version ? `v${event.version}` : event.path || event.failedNodeIds || "";
+    return `
+      <div class="audit-row">
+        <strong>${escapeHtml(type.replaceAll("_", " "))}</strong>
+        <span>${escapeHtml(key)} ${escapeHtml(String(detail))}</span>
+      </div>
+    `;
+  }).join("") || "<div class=\"audit-row\">No Kafka events yet.</div>";
 }
 
 function renderOps() {
@@ -216,6 +264,18 @@ function formatEntries(values, fallback) {
   return entries.map(([key, value]) => `${escapeHtml(key)}:${escapeHtml(String(value))}`).join(", ");
 }
 
+function formatMetadata(values, fallback) {
+  const entries = Object.entries(values);
+  if (!entries.length) {
+    return fallback;
+  }
+  return entries.map(([key, meta]) => {
+    const version = meta.version || 0;
+    const owner = meta.ownerNodeId ?? "n/a";
+    return `${escapeHtml(key)} v${escapeHtml(String(version))} owner ${escapeHtml(String(owner))}`;
+  }).join(", ");
+}
+
 function escapeHtml(value) {
   return value
     .replaceAll("&", "&amp;")
@@ -230,6 +290,9 @@ document.getElementById("putButton").addEventListener("click", () => {
 });
 document.getElementById("getButton").addEventListener("click", () => {
   readKey().catch(showError);
+});
+document.getElementById("deleteButton").addEventListener("click", () => {
+  deleteKey().catch(showError);
 });
 document.getElementById("refreshButton").addEventListener("click", () => {
   refresh().catch(showError);

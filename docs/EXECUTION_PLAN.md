@@ -343,13 +343,16 @@ Problem being solved:
 
 - Chord decides key ownership and lookup routing.
 - Redis stores each node's primary and replica key data outside the Java process.
-- Kafka records a replayable stream of service events for joins, writes, lookups, replica writes, repairs, and promotions.
+- Kafka records a replayable stream of service events for joins, writes, deletes, lookups, replica writes, repairs, read repairs, and promotions.
 - Docker Compose and Docker Desktop Kubernetes run each node as an independently addressable service.
 
 Current implementation:
 
 - `RedisKeyValueStore` implements the existing `KeyValueStore` interface.
 - `ServiceChordNode` accepts separate primary and replica stores.
+- `ServiceChordNode` stores versioned records internally while returning plain values through the API.
+- Service reads repair missing or stale successor replicas.
+- Service deletes remove primary and known successor replica copies.
 - `ServiceNodeMain` supports `--storage redis`, Redis host/port/prefix options, and Kafka bootstrap/topic options.
 - Redis namespaces separate primary and replica copies:
 
@@ -359,13 +362,15 @@ ringforge:node:<id>:replica:...
 ```
 
 - `KafkaServiceEventPublisher` publishes best-effort service events without affecting DHT correctness.
+- `KafkaEventReader` lets the gateway expose recent Kafka events at `/api/audit/events`.
 - Docker Compose starts Kafka, three Redis instances, three Chord service nodes, and the gateway.
 - Kubernetes manifests deploy the same topology on Docker Desktop Kubernetes.
+- Scripted deployment and smoke tests validate the full local workflow.
 
 Validation:
 
-- JUnit tests verify routing, finger shortcuts, bootstrap join, heartbeat repair, successor replication, and replica promotion.
-- Deployment smoke tests verify gateway writes/reads, Redis primary/replica placement, Kafka events, metrics, ops reports, and failover reads after scaling a node down.
+- JUnit tests verify routing, finger shortcuts, bootstrap join, heartbeat repair, successor replication, distributed delete, read repair, version metadata, and replica promotion.
+- Deployment smoke tests verify gateway writes/reads/deletes, Redis primary/replica placement, Kafka events, metrics, ops reports, and failover reads after scaling a node down.
 
 ## Phase 11: LLM-Assisted Operations
 
@@ -399,4 +404,4 @@ Current implementation:
 
 Target project description:
 
-> Built RingForge, a Java distributed key-value platform based on Chord DHT routing. Implemented dynamic node joins/leaves, finger-table routing, successor replication, heartbeat-based failure detection, multi-process local clustering, Redis-backed primary and replica storage, Kafka-backed service events, Docker/Kubernetes deployment artifacts, Prometheus-style metrics, and deterministic tests for churn, routing, failover, and lookup correctness.
+> Built RingForge, a Java distributed key-value platform based on Chord DHT routing. Implemented dynamic node joins/leaves, finger-table routing, successor replication, read repair, distributed delete, heartbeat-based failure detection, multi-process local clustering, Redis-backed versioned primary and replica storage, Kafka-backed audit events, Docker/Kubernetes deployment automation, Prometheus-style metrics, and deterministic tests for churn, routing, failover, and lookup correctness.

@@ -83,11 +83,19 @@ public final class ServiceChordNode {
     }
 
     public Map<Integer, String> localKeys() {
-        return store.snapshot();
+        return userValues(store.snapshot(), nodeId);
     }
 
     public Map<Integer, String> replicaKeys() {
-        return replicaStore.snapshot();
+        return userValues(replicaStore.snapshot(), nodeId);
+    }
+
+    public Map<Integer, ServiceStoredValue> localRecords() {
+        return records(store.snapshot(), nodeId);
+    }
+
+    public Map<Integer, ServiceStoredValue> replicaRecords() {
+        return records(replicaStore.snapshot(), nodeId);
     }
 
     public synchronized void configureCluster(List<NodeEndpoint> members) {
@@ -197,9 +205,11 @@ public final class ServiceChordNode {
         int key = ring.normalize(rawKey);
         List<Integer> nextPath = appendPath(path);
         if (isResponsibleFor(key)) {
-            store.put(key, value);
-            replicatePrimary(key, value);
-            publish("KEY_STORED", details("key", String.valueOf(key), "role", "primary"));
+            ServiceStoredValue record = ServiceStoredValue.create(value, nextVersion(key), nodeId);
+            store.put(key, record.encode());
+            replicatePrimary(key, record);
+            publish("KEY_STORED", details("key", String.valueOf(key), "role", "primary",
+                    "version", String.valueOf(record.version()), "ownerNodeId", String.valueOf(record.ownerNodeId())));
             return;
         }
         forwardPut(nextHop(key, nextPath), key, value, nextPath);
@@ -209,26 +219,60 @@ public final class ServiceChordNode {
         int key = ring.normalize(rawKey);
         List<Integer> nextPath = appendPath(path);
         if (isResponsibleFor(key)) {
-            Optional<String> value = store.get(key);
+            Optional<ServiceStoredValue> value = record(store.get(key), nodeId);
+            if (value.isPresent()) {
+                repairReplicas(key, value.get());
+            }
             publish("LOOKUP_COMPLETED", details("key", String.valueOf(key), "found", String.valueOf(value.isPresent()),
                     "responsibleNodeId", String.valueOf(nodeId), "path", nextPath.toString()));
-            return new ServiceLookupResult(key, value.isPresent(), value.orElse(null), nodeId, nextPath);
+            return new ServiceLookupResult(key, value.isPresent(), value.map(ServiceStoredValue::value).orElse(null), nodeId, nextPath);
         }
         return forwardLookup(nextHop(key, nextPath), key, nextPath);
     }
 
+    public Optional<String> delete(int rawKey, List<Integer> path) {
+        int key = ring.normalize(rawKey);
+        List<Integer> nextPath = appendPath(path);
+        if (isResponsibleFor(key)) {
+            Optional<ServiceStoredValue> deleted = record(store.delete(key), nodeId);
+            deleteReplicas(key);
+            publish("KEY_DELETED", details("key", String.valueOf(key), "found", String.valueOf(deleted.isPresent()),
+                    "responsibleNodeId", String.valueOf(nodeId), "path", nextPath.toString()));
+            return deleted.map(ServiceStoredValue::value);
+        }
+        return forwardDelete(nextHop(key, nextPath), key, nextPath);
+    }
+
     public Optional<String> getLocal(int rawKey) {
-        return store.get(ring.normalize(rawKey));
+        return record(store.get(ring.normalize(rawKey)), nodeId).map(ServiceStoredValue::value);
     }
 
     public void putReplica(int rawKey, String value) {
+        putReplicaRecord(rawKey, ServiceStoredValue.create(value, 1L, nodeId).encode());
+    }
+
+    public void putReplicaRecord(int rawKey, String encodedRecord) {
         int key = ring.normalize(rawKey);
-        replicaStore.put(key, value);
-        publish("REPLICA_WRITTEN", details("key", String.valueOf(key), "role", "replica"));
+        ServiceStoredValue record = record(Optional.ofNullable(encodedRecord), nodeId)
+                .orElseGet(() -> ServiceStoredValue.create("", 1L, nodeId));
+        replicaStore.put(key, record.encode());
+        publish("REPLICA_WRITTEN", details("key", String.valueOf(key), "role", "replica",
+                "version", String.valueOf(record.version()), "ownerNodeId", String.valueOf(record.ownerNodeId())));
     }
 
     public Optional<String> getReplica(int rawKey) {
+        return record(replicaStore.get(ring.normalize(rawKey)), nodeId).map(ServiceStoredValue::value);
+    }
+
+    public Optional<String> getReplicaRecord(int rawKey) {
         return replicaStore.get(ring.normalize(rawKey));
+    }
+
+    public Optional<String> deleteReplica(int rawKey) {
+        int key = ring.normalize(rawKey);
+        Optional<ServiceStoredValue> deleted = record(replicaStore.delete(key), nodeId);
+        publish("REPLICA_DELETED", details("key", String.valueOf(key), "found", String.valueOf(deleted.isPresent())));
+        return deleted.map(ServiceStoredValue::value);
     }
 
     private void propagateMembership(List<NodeEndpoint> members) {
@@ -248,7 +292,9 @@ public final class ServiceChordNode {
             if (!isResponsibleFor(key)) {
                 Optional<String> moved = store.delete(key);
                 if (moved.isPresent()) {
-                    put(key, moved.get(), Collections.emptyList());
+                    ServiceStoredValue movedRecord = ServiceStoredValue.parse(moved.get(), nodeId)
+                            .orElseGet(() -> ServiceStoredValue.legacy(moved.get(), nodeId));
+                    put(key, movedRecord.value(), Collections.emptyList());
                 }
             }
         }
@@ -259,11 +305,14 @@ public final class ServiceChordNode {
         for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
             int key = ring.normalize(entry.getKey());
             if (isResponsibleFor(key) && store.get(key).isEmpty()) {
-                Optional<String> replica = replicaStore.delete(key);
+                Optional<ServiceStoredValue> replica = record(replicaStore.delete(key), nodeId);
                 if (replica.isPresent()) {
-                    store.put(key, replica.get());
-                    replicatePrimary(key, replica.get());
-                    publish("REPLICA_PROMOTED", details("key", String.valueOf(key), "newOwnerId", String.valueOf(nodeId)));
+                    ServiceStoredValue promoted = ServiceStoredValue.create(replica.get().value(),
+                            replica.get().version() + 1, nodeId);
+                    store.put(key, promoted.encode());
+                    replicatePrimary(key, promoted);
+                    publish("REPLICA_PROMOTED", details("key", String.valueOf(key), "newOwnerId", String.valueOf(nodeId),
+                            "version", String.valueOf(promoted.version())));
                 }
             }
         }
@@ -303,16 +352,81 @@ public final class ServiceChordNode {
         new ServiceChordClient(endpoint.baseUri()).put(key, value, path);
     }
 
+    private Optional<String> forwardDelete(NodeEndpoint endpoint, int key, List<Integer> path) {
+        return new ServiceChordClient(endpoint.baseUri()).delete(key, path);
+    }
+
     private ServiceLookupResult forwardLookup(NodeEndpoint endpoint, int key, List<Integer> path) {
         return new ServiceChordClient(endpoint.baseUri()).lookup(key, path);
     }
 
-    private void replicatePrimary(int key, String value) {
+    private void replicatePrimary(int key, ServiceStoredValue record) {
         for (NodeEndpoint successor : successorsAfter(nodeId, replicaCount())) {
             if (successor.nodeId() != nodeId) {
-                new ServiceChordClient(successor.baseUri()).putReplica(key, value);
+                new ServiceChordClient(successor.baseUri()).putReplicaRecord(key, record.encode());
             }
         }
+    }
+
+    private void repairReplicas(int key, ServiceStoredValue record) {
+        for (NodeEndpoint successor : successorsAfter(nodeId, replicaCount())) {
+            if (successor.nodeId() == nodeId) {
+                continue;
+            }
+            try {
+                Optional<ServiceStoredValue> replica = record(new ServiceChordClient(successor.baseUri()).getReplicaRecord(key), successor.nodeId());
+                if (replica.isEmpty() || replica.get().version() < record.version()) {
+                    new ServiceChordClient(successor.baseUri()).putReplicaRecord(key, record.encode());
+                    publish("READ_REPAIR_APPLIED", details("key", String.valueOf(key), "replicaNodeId",
+                            String.valueOf(successor.nodeId()), "version", String.valueOf(record.version())));
+                }
+            } catch (RuntimeException ignored) {
+                // Heartbeat repair handles failed replica nodes.
+            }
+        }
+    }
+
+    private void deleteReplicas(int key) {
+        for (NodeEndpoint successor : successorsAfter(nodeId, replicaCount())) {
+            if (successor.nodeId() != nodeId) {
+                try {
+                    new ServiceChordClient(successor.baseUri()).deleteReplica(key);
+                } catch (RuntimeException ignored) {
+                    // Delete remains best-effort for unreachable replicas.
+                }
+            }
+        }
+    }
+
+    private long nextVersion(int key) {
+        return record(store.get(key), nodeId)
+                .map(value -> value.version() + 1)
+                .orElse(1L);
+    }
+
+    private static Optional<ServiceStoredValue> record(Optional<String> stored, int fallbackOwnerNodeId) {
+        if (stored.isEmpty()) {
+            return Optional.empty();
+        }
+        return ServiceStoredValue.parse(stored.get(), fallbackOwnerNodeId);
+    }
+
+    private static Map<Integer, String> userValues(Map<Integer, String> snapshot, int fallbackOwnerNodeId) {
+        Map<Integer, String> values = new LinkedHashMap<>();
+        for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
+            ServiceStoredValue.parse(entry.getValue(), fallbackOwnerNodeId)
+                    .ifPresent(record -> values.put(entry.getKey(), record.value()));
+        }
+        return values;
+    }
+
+    private static Map<Integer, ServiceStoredValue> records(Map<Integer, String> snapshot, int fallbackOwnerNodeId) {
+        Map<Integer, ServiceStoredValue> values = new LinkedHashMap<>();
+        for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
+            ServiceStoredValue.parse(entry.getValue(), fallbackOwnerNodeId)
+                    .ifPresent(record -> values.put(entry.getKey(), record));
+        }
+        return values;
     }
 
     private void publish(String type, Map<String, String> details) {

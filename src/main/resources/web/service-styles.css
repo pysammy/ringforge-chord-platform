@@ -194,19 +194,22 @@ canvas {
 }
 
 .node-list,
-.ops-report {
+.ops-report,
+.audit-events {
   display: grid;
   gap: 8px;
 }
 
 .node-row,
-.ops-row {
+.ops-row,
+.audit-row {
   padding: 8px 0;
   border-top: 1px solid #edf0f5;
 }
 
 .node-row:first-child,
-.ops-row:first-child {
+.ops-row:first-child,
+.audit-row:first-child {
   border-top: 0;
 }
 
@@ -224,6 +227,38 @@ canvas {
 .kv {
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.meta {
+  margin-top: 3px;
+  color: #4c5968;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.runbook {
+  display: grid;
+  gap: 8px;
+}
+
+.runbook code {
+  display: block;
+  padding: 8px;
+  border: 1px solid #edf0f5;
+  border-radius: 6px;
+  color: var(--ink);
+  background: #f8fafc;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.audit-row {
+  display: grid;
+  gap: 2px;
+}
+
+.audit-row strong {
+  color: var(--ink);
 }
 
 .reachable {

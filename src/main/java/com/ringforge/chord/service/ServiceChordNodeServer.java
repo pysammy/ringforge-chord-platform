@@ -51,9 +51,12 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         nodeServer.server.createContext("/node/finger-table", nodeServer::fingerTable);
         nodeServer.server.createContext("/lookup", nodeServer::lookup);
         nodeServer.server.createContext("/keys/put", nodeServer::put);
+        nodeServer.server.createContext("/keys/delete", nodeServer::delete);
         nodeServer.server.createContext("/keys/local", nodeServer::local);
         nodeServer.server.createContext("/replicas/put", nodeServer::putReplica);
+        nodeServer.server.createContext("/replicas/delete", nodeServer::deleteReplica);
         nodeServer.server.createContext("/replicas/local", nodeServer::localReplica);
+        nodeServer.server.createContext("/replicas/record", nodeServer::replicaRecord);
         nodeServer.server.createContext("/node/health", nodeServer::health);
         nodeServer.server.setExecutor(Executors.newFixedThreadPool(6));
         nodeServer.server.start();
@@ -213,6 +216,20 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         }
     }
 
+    private void delete(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            Map<String, String> query = query(exchange.getRequestURI());
+            int key = Integer.parseInt(query.getOrDefault("key", "0"));
+            java.util.Optional<String> value = node.delete(key, parsePath(query.get("path")));
+            sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
     private void local(HttpExchange exchange) throws IOException {
         if (!requireMethod(exchange, "GET")) {
             return;
@@ -230,8 +247,26 @@ public final class ServiceChordNodeServer implements AutoCloseable {
             Map<String, String> query = query(exchange.getRequestURI());
             int key = Integer.parseInt(query.getOrDefault("key", "0"));
             String value = query.getOrDefault("value", "");
-            node.putReplica(key, value);
+            String record = query.get("record");
+            if (record == null) {
+                node.putReplica(key, value);
+            } else {
+                node.putReplicaRecord(key, record);
+            }
             sendJson(exchange, 200, ServiceJson.action("ok", "replica stored"));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
+    }
+
+    private void deleteReplica(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
+            java.util.Optional<String> value = node.deleteReplica(key);
+            sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
         } catch (RuntimeException error) {
             sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
         }
@@ -243,6 +278,15 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         }
         int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
         java.util.Optional<String> value = node.getReplica(key);
+        sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
+    }
+
+    private void replicaRecord(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
+        java.util.Optional<String> value = node.getReplicaRecord(key);
         sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
     }
 

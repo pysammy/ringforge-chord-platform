@@ -43,6 +43,10 @@ final class ServiceJson {
         json.append(',');
         values(json, "replicas", node.replicaKeys());
         json.append(',');
+        records(json, "keyMetadata", node.localRecords());
+        json.append(',');
+        records(json, "replicaMetadata", node.replicaRecords());
+        json.append(',');
         json.append("\"fingers\":[");
         List<FingerEntry> fingers = node.fingerTable().entries();
         for (int i = 0; i < fingers.size(); i++) {
@@ -139,6 +143,24 @@ final class ServiceJson {
                 json.append(',');
             }
             json.append('"').append(entry.getKey()).append("\":\"").append(escape(entry.getValue())).append('"');
+        }
+        json.append('}');
+    }
+
+    private static void records(StringBuilder json, String name, Map<Integer, ServiceStoredValue> values) {
+        json.append('"').append(name).append("\":{");
+        int index = 0;
+        for (Map.Entry<Integer, ServiceStoredValue> entry : values.entrySet()) {
+            if (index++ > 0) {
+                json.append(',');
+            }
+            ServiceStoredValue value = entry.getValue();
+            json.append('"').append(entry.getKey()).append("\":{");
+            json.append("\"value\":\"").append(escape(value.value())).append("\",");
+            json.append("\"version\":").append(value.version()).append(',');
+            json.append("\"ownerNodeId\":").append(value.ownerNodeId()).append(',');
+            json.append("\"timestamp\":\"").append(escape(value.timestamp())).append("\"");
+            json.append('}');
         }
         json.append('}');
     }

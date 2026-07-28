@@ -1,5 +1,6 @@
 package com.ringforge.chord.app;
 
+import com.ringforge.chord.events.KafkaEventReader;
 import com.ringforge.chord.service.NodeEndpoint;
 import com.ringforge.chord.service.ServiceChordClient;
 import com.ringforge.chord.service.ServiceLookupResult;
@@ -14,6 +15,7 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,20 +26,29 @@ import java.util.concurrent.Executors;
 
 public final class ServiceGatewayServer implements AutoCloseable {
     private final URI bootstrapUri;
+    private final KafkaEventReader eventReader;
     private final HttpServer server;
 
-    private ServiceGatewayServer(URI bootstrapUri, HttpServer server) {
+    private ServiceGatewayServer(URI bootstrapUri, KafkaEventReader eventReader, HttpServer server) {
         this.bootstrapUri = bootstrapUri;
+        this.eventReader = eventReader;
         this.server = server;
     }
 
     public static ServiceGatewayServer start(URI bootstrapUri, int port) throws IOException {
+        return start(bootstrapUri, port, null);
+    }
+
+    public static ServiceGatewayServer start(URI bootstrapUri, int port, KafkaEventReader eventReader) throws IOException {
         ServiceGatewayServer gateway = new ServiceGatewayServer(
                 bootstrapUri,
+                eventReader,
                 HttpServer.create(new InetSocketAddress(port), 0)
         );
         gateway.server.createContext("/api/dht/put", gateway::put);
         gateway.server.createContext("/api/dht/get", gateway::get);
+        gateway.server.createContext("/api/dht/delete", gateway::delete);
+        gateway.server.createContext("/api/audit/events", gateway::auditEvents);
         gateway.server.createContext("/api/cluster/members", gateway::members);
         gateway.server.createContext("/api/cluster/snapshot", gateway::snapshot);
         gateway.server.createContext("/api/cluster/ops-report", gateway::opsReport);
@@ -52,7 +63,7 @@ public final class ServiceGatewayServer implements AutoCloseable {
         Map<String, String> options = parseArgs(args);
         int port = Integer.parseInt(options.getOrDefault("port", "8081"));
         URI bootstrapUri = URI.create(options.getOrDefault("bootstrap", "http://localhost:5100"));
-        ServiceGatewayServer.start(bootstrapUri, port);
+        ServiceGatewayServer.start(bootstrapUri, port, eventReader(options));
         System.out.println("RingForge service gateway listening on http://localhost:" + port);
         System.out.println("bootstrap=" + bootstrapUri);
     }
@@ -95,6 +106,26 @@ public final class ServiceGatewayServer implements AutoCloseable {
         }
     }
 
+    private void delete(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
+            java.util.Optional<String> deleted = new ServiceChordClient(bootstrapUri).delete(key, Collections.emptyList());
+            StringBuilder json = new StringBuilder();
+            json.append('{');
+            json.append("\"status\":\"ok\",");
+            json.append("\"deleted\":").append(deleted.isPresent()).append(',');
+            field(json, "value", deleted.orElse(null)).append(',');
+            field(json, "bootstrap", bootstrapUri.toString());
+            json.append('}');
+            sendJson(exchange, 200, json.toString());
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, error(error.getMessage()));
+        }
+    }
+
     private void members(HttpExchange exchange) throws IOException {
         if (!requireMethod(exchange, "GET")) {
             return;
@@ -108,6 +139,32 @@ public final class ServiceGatewayServer implements AutoCloseable {
                     json.append(',');
                 }
                 endpoint(json, members.get(i));
+            }
+            json.append("]}");
+            sendJson(exchange, 200, json.toString());
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, error(error.getMessage()));
+        }
+    }
+
+    private void auditEvents(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        if (eventReader == null) {
+            sendJson(exchange, 200, "{\"enabled\":false,\"events\":[]}");
+            return;
+        }
+        try {
+            int limit = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("limit", "50"));
+            List<String> events = eventReader.latestEvents(limit, Duration.ofSeconds(3));
+            StringBuilder json = new StringBuilder();
+            json.append("{\"enabled\":true,\"events\":[");
+            for (int i = 0; i < events.size(); i++) {
+                if (i > 0) {
+                    json.append(',');
+                }
+                appendJsonValue(json, events.get(i));
             }
             json.append("]}");
             sendJson(exchange, 200, json.toString());
@@ -384,6 +441,14 @@ public final class ServiceGatewayServer implements AutoCloseable {
         return options;
     }
 
+    private static KafkaEventReader eventReader(Map<String, String> options) {
+        String bootstrapServers = options.get("kafka-bootstrap-servers");
+        if (bootstrapServers == null || bootstrapServers.trim().isEmpty()) {
+            return null;
+        }
+        return new KafkaEventReader(bootstrapServers, options.getOrDefault("kafka-topic", "ringforge.events"));
+    }
+
     private static Map<String, String> query(URI uri) {
         Map<String, String> values = new HashMap<>();
         String rawQuery = uri.getRawQuery();
@@ -441,6 +506,15 @@ public final class ServiceGatewayServer implements AutoCloseable {
 
     private static String error(String message) {
         return "{\"error\":\"" + escape(message == null ? "unknown error" : message) + "\"}";
+    }
+
+    private static void appendJsonValue(StringBuilder json, String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            json.append(trimmed);
+            return;
+        }
+        json.append('"').append(escape(value == null ? "" : value)).append('"');
     }
 
     private static String escape(String value) {

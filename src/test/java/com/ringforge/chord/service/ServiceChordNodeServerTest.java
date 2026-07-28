@@ -204,6 +204,96 @@ class ServiceChordNodeServerTest {
     }
 
     @Test
+    void serviceRuntimeDeletesPrimaryAndSuccessorReplicas() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0)) {
+
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client30 = new ServiceChordClient(endpoint(30, server30.port()).baseUri());
+            ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
+
+            client0.put(45, "delete-me", Collections.emptyList());
+            assertEquals("delete-me", client65.getLocal(45).orElseThrow(AssertionError::new));
+            assertEquals("delete-me", client0.getReplica(45).orElseThrow(AssertionError::new));
+            assertEquals("delete-me", client30.getReplica(45).orElseThrow(AssertionError::new));
+
+            assertEquals("delete-me", client0.delete(45, Collections.emptyList()).orElseThrow(AssertionError::new));
+
+            assertTrue(client0.lookup(45, Collections.emptyList()).value().isEmpty());
+            assertTrue(client65.getLocal(45).isEmpty());
+            assertTrue(client0.getReplica(45).isEmpty());
+            assertTrue(client30.getReplica(45).isEmpty());
+        }
+    }
+
+    @Test
+    void lookupRepairsMissingSuccessorReplica() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0);
+             ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0)) {
+
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
+
+            client0.put(20, "repair-me", Collections.emptyList());
+            assertEquals("repair-me", client65.getReplica(20).orElseThrow(AssertionError::new));
+
+            assertEquals("repair-me", client65.deleteReplica(20).orElseThrow(AssertionError::new));
+            assertTrue(client65.getReplica(20).isEmpty());
+
+            ServiceLookupResult lookup = client0.lookup(20, Collections.emptyList());
+            assertTrue(lookup.found());
+            assertEquals("repair-me", lookup.value().orElseThrow(AssertionError::new));
+            assertEquals("repair-me", client65.getReplica(20).orElseThrow(AssertionError::new));
+        }
+    }
+
+    @Test
+    void nodeStateIncludesVersionedStorageMetadata() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0)) {
+            node0.configureCluster(Collections.singletonList(endpoint(0, server0.port())));
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+
+            client0.put(12, "versioned", Collections.emptyList());
+            String state = client0.nodeStateJson();
+
+            assertTrue(state.contains("\"keyMetadata\""));
+            assertTrue(state.contains("\"version\":1"));
+            assertTrue(state.contains("\"ownerNodeId\":0"));
+            assertTrue(state.contains("\"value\":\"versioned\""));
+        }
+    }
+
+    @Test
     void heartbeatRepairPromotesReplicaWhenPrimaryOwnerFails() throws Exception {
         ServiceChordNode node0 = new ServiceChordNode(0, 8);
         ServiceChordNode node30 = new ServiceChordNode(30, 8);

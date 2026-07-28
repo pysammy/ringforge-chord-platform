@@ -5,9 +5,23 @@ KIND_CLUSTER="${RINGFORGE_KIND_CLUSTER:-ringforge}"
 CONTEXT="${KUBE_CONTEXT:-kind-${KIND_CLUSTER}}"
 NAMESPACE="${RINGFORGE_NAMESPACE:-ringforge-demo}"
 PORT="${RINGFORGE_GATEWAY_PORT:-18082}"
-BASE_URL="http://localhost:${PORT}"
 KEY="${RINGFORGE_TEST_KEY:-45}"
 VALUE="${RINGFORGE_TEST_VALUE:-smoke-redis-kafka-check}"
+
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
+  if [[ -n "${RINGFORGE_GATEWAY_PORT:-}" ]]; then
+    echo "Port ${PORT} is already in use. Set RINGFORGE_GATEWAY_PORT to a free port." >&2
+    exit 1
+  fi
+  for candidate in {18083..18120}; do
+    if ! lsof -nP -iTCP:"${candidate}" -sTCP:LISTEN >/dev/null 2>&1; then
+      PORT="$candidate"
+      break
+    fi
+  done
+fi
+
+BASE_URL="http://localhost:${PORT}"
 
 cleanup() {
   if [[ -n "${PORT_FORWARD_PID:-}" ]]; then

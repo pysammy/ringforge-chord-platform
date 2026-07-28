@@ -53,6 +53,7 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         nodeServer.server.createContext("/keys/put", nodeServer::put);
         nodeServer.server.createContext("/keys/delete", nodeServer::delete);
         nodeServer.server.createContext("/keys/local", nodeServer::local);
+        nodeServer.server.createContext("/keys/primary-record", nodeServer::putPrimaryRecord);
         nodeServer.server.createContext("/replicas/put", nodeServer::putReplica);
         nodeServer.server.createContext("/replicas/delete", nodeServer::deleteReplica);
         nodeServer.server.createContext("/replicas/local", nodeServer::localReplica);
@@ -237,6 +238,20 @@ public final class ServiceChordNodeServer implements AutoCloseable {
         int key = Integer.parseInt(query(exchange.getRequestURI()).getOrDefault("key", "0"));
         java.util.Optional<String> value = node.getLocal(key);
         sendJson(exchange, 200, ServiceJson.valueResponse(value.isPresent(), value.orElse(null)));
+    }
+
+    private void putPrimaryRecord(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "POST")) {
+            return;
+        }
+        try {
+            Map<String, String> query = query(exchange.getRequestURI());
+            int key = Integer.parseInt(query.getOrDefault("key", "0"));
+            node.acceptPrimaryRecord(key, query.getOrDefault("record", ""));
+            sendJson(exchange, 200, ServiceJson.action("ok", "primary accepted"));
+        } catch (RuntimeException error) {
+            sendJson(exchange, 500, ServiceJson.error(error.getMessage()));
+        }
     }
 
     private void putReplica(HttpExchange exchange) throws IOException {

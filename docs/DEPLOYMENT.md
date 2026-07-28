@@ -181,9 +181,9 @@ kind delete cluster --name ringforge
 
 If using an existing cluster, do not delete the cluster unless it was created only for RingForge.
 
-## Kubernetes With Docker Desktop
+## Kubernetes With Docker Desktop And kind
 
-This is the recommended local path when Docker Desktop Kubernetes is enabled.
+This is the recommended local path for development. It uses Docker Desktop as the container engine and creates or reuses a dedicated `kind-ringforge` Kubernetes cluster. It does not use unrelated clusters such as `kind-hamsaz`.
 
 The script-first path is:
 
@@ -194,7 +194,7 @@ scripts/smoke-test-k8s.sh
 
 The smoke test verifies membership, write/read routing, Redis primary and replica records, Kafka audit events, failover promotion, restore, and distributed delete.
 
-Make sure the active Kubernetes context is Docker Desktop:
+Expected context after the deploy script creates the cluster:
 
 ```bash
 kubectl config current-context
@@ -203,10 +203,10 @@ kubectl config current-context
 Expected:
 
 ```text
-docker-desktop
+kind-ringforge
 ```
 
-Build the local application image from the current code:
+The remaining commands in this section show the manual flow. Use `kind-ringforge` as the context unless you intentionally set `KUBE_CONTEXT` to another RingForge-specific cluster.
 
 ```bash
 docker build -t ringforge-chord-platform:redis-kafka-local .
@@ -215,76 +215,42 @@ docker build -t ringforge-chord-platform:redis-kafka-local .
 Create a clean namespace:
 
 ```bash
-kubectl --context docker-desktop delete namespace ringforge-demo --ignore-not-found=true
-kubectl --context docker-desktop create namespace ringforge-demo --dry-run=client -o yaml \
-  | kubectl --context docker-desktop apply -f -
+kubectl --context kind-ringforge delete namespace ringforge-demo --ignore-not-found=true
+kubectl --context kind-ringforge create namespace ringforge-demo --dry-run=client -o yaml \
+  | kubectl --context kind-ringforge apply -f -
 ```
 
-Import the local image into the Docker Desktop Kubernetes node.
+Load the local image into the kind cluster.
 
-Docker Desktop Kubernetes may not automatically see every image tag from the Docker image list. The manifest uses `imagePullPolicy: Never`, so the image must exist inside the Kubernetes node runtime.
+The manifest uses `imagePullPolicy: Never`, so the image must exist inside the Kubernetes node runtime.
 
 ```bash
-docker save ringforge-chord-platform:redis-kafka-local \
-  -o /tmp/ringforge-chord-platform-redis-kafka-local.tar
-
-K8S_NODE=$(kubectl --context docker-desktop get nodes -o jsonpath='{.items[0].metadata.name}')
-
-kubectl --context docker-desktop debug node/${K8S_NODE} \
-  -n ringforge-demo \
-  --image=busybox \
-  -- sleep 300
-
-LOADER_POD=$(kubectl --context docker-desktop -n ringforge-demo get pods \
-  --sort-by=.metadata.creationTimestamp \
-  --no-headers \
-  | awk '/node-debugger/ { pod=$1 } END { print pod }')
-
-kubectl --context docker-desktop -n ringforge-demo wait \
-  --for=condition=Ready pod/${LOADER_POD} \
-  --timeout=45s
-
-kubectl --context docker-desktop -n ringforge-demo cp \
-  /tmp/ringforge-chord-platform-redis-kafka-local.tar \
-  ${LOADER_POD}:/host/tmp/ringforge-chord-platform-redis-kafka-local.tar
-
-kubectl --context docker-desktop -n ringforge-demo exec ${LOADER_POD} -- \
-  chroot /host ctr -n k8s.io images import \
-  /tmp/ringforge-chord-platform-redis-kafka-local.tar
-
-kubectl --context docker-desktop -n ringforge-demo exec ${LOADER_POD} -- \
-  chroot /host crictl images | grep ringforge-chord-platform
-
-kubectl --context docker-desktop -n ringforge-demo exec ${LOADER_POD} -- \
-  chroot /host rm -f /tmp/ringforge-chord-platform-redis-kafka-local.tar
-
-kubectl --context docker-desktop -n ringforge-demo delete pod/${LOADER_POD}
-rm -f /tmp/ringforge-chord-platform-redis-kafka-local.tar
+kind load docker-image --name ringforge ringforge-chord-platform:redis-kafka-local
 ```
 
 Deploy:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo apply -f deploy/kubernetes/ringforge-demo.yaml
+kubectl --context kind-ringforge -n ringforge-demo apply -f deploy/kubernetes/ringforge-demo.yaml
 ```
 
 Wait for every deployment:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-kafka --timeout=180s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-redis-0 --timeout=90s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-redis-30 --timeout=90s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-redis-65 --timeout=90s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-node-0 --timeout=120s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-node-30 --timeout=120s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-node-65 --timeout=120s
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-gateway --timeout=120s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-kafka --timeout=180s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-redis-0 --timeout=90s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-redis-30 --timeout=90s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-redis-65 --timeout=90s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-node-0 --timeout=120s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-node-30 --timeout=120s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-node-65 --timeout=120s
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-gateway --timeout=120s
 ```
 
 Expose the gateway locally:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo port-forward service/ringforge-gateway 18082:8081
+kubectl --context kind-ringforge -n ringforge-demo port-forward service/ringforge-gateway 18082:8081
 ```
 
 Smoke test from another terminal:
@@ -307,18 +273,18 @@ http://localhost:18082
 Verify Redis primary and replica placement:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo exec deployment/ringforge-redis-65 -- \
+kubectl --context kind-ringforge -n ringforge-demo exec deployment/ringforge-redis-65 -- \
   redis-cli GET ringforge:node:65:primary:key:45
-kubectl --context docker-desktop -n ringforge-demo exec deployment/ringforge-redis-0 -- \
+kubectl --context kind-ringforge -n ringforge-demo exec deployment/ringforge-redis-0 -- \
   redis-cli GET ringforge:node:0:replica:key:45
-kubectl --context docker-desktop -n ringforge-demo exec deployment/ringforge-redis-30 -- \
+kubectl --context kind-ringforge -n ringforge-demo exec deployment/ringforge-redis-30 -- \
   redis-cli GET ringforge:node:30:replica:key:45
 ```
 
 Verify Kafka captured service events:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo exec deployment/ringforge-kafka -- \
+kubectl --context kind-ringforge -n ringforge-demo exec deployment/ringforge-kafka -- \
   /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server ringforge-kafka:9092 \
   --topic ringforge.events \
@@ -329,7 +295,7 @@ kubectl --context docker-desktop -n ringforge-demo exec deployment/ringforge-kaf
 Failure test:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo scale deployment/ringforge-node-65 --replicas=0
+kubectl --context kind-ringforge -n ringforge-demo scale deployment/ringforge-node-65 --replicas=0
 sleep 4
 curl http://localhost:18082/api/cluster/members
 curl 'http://localhost:18082/api/dht/get?key=45'
@@ -357,8 +323,8 @@ Expected result:
 Restore:
 
 ```bash
-kubectl --context docker-desktop -n ringforge-demo scale deployment/ringforge-node-65 --replicas=1
-kubectl --context docker-desktop -n ringforge-demo rollout status deployment/ringforge-node-65 --timeout=90s
+kubectl --context kind-ringforge -n ringforge-demo scale deployment/ringforge-node-65 --replicas=1
+kubectl --context kind-ringforge -n ringforge-demo rollout status deployment/ringforge-node-65 --timeout=90s
 ```
 
 Cleanup:

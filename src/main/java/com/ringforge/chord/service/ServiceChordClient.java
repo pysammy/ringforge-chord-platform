@@ -58,6 +58,10 @@ public final class ServiceChordClient {
         request("POST", "/replicas/put?key=" + key + "&record=" + encode(record));
     }
 
+    public void putPrimaryRecord(int key, String record) {
+        request("POST", "/keys/primary-record?key=" + key + "&record=" + encode(record));
+    }
+
     public Optional<String> getReplica(int key) {
         String response = request("GET", "/replicas/local?key=" + key);
         if (!response.contains("\"found\":true")) {

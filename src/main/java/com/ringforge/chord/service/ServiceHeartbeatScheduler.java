@@ -57,6 +57,7 @@ public final class ServiceHeartbeatScheduler implements AutoCloseable {
     private void repairSafely() {
         try {
             lastFailedNodeIds = node.repairFailedMembers();
+            node.gossipMembership();
             lastRunEpochMillis = clock.millis();
             runCount.incrementAndGet();
         } catch (RuntimeException ignored) {

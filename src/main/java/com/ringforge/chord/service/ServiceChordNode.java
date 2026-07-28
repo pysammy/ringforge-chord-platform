@@ -163,6 +163,30 @@ public final class ServiceChordNode {
         return Collections.unmodifiableList(failed);
     }
 
+    public void gossipMembership() {
+        List<NodeEndpoint> localMembers = members();
+        for (NodeEndpoint member : localMembers) {
+            if (member.nodeId() == nodeId) {
+                continue;
+            }
+            try {
+                ServiceChordClient client = new ServiceChordClient(member.baseUri());
+                List<NodeEndpoint> merged = mergeMembers(localMembers, client.members());
+                if (!sameMembers(merged, localMembers)) {
+                    configureCluster(merged, true);
+                    localMembers = members();
+                }
+                if (!sameMembers(merged, client.members())) {
+                    client.refreshMembers(merged);
+                    publish("MEMBERSHIP_GOSSIPED", details("targetNodeId", String.valueOf(member.nodeId()),
+                            "memberCount", String.valueOf(merged.size())));
+                }
+            } catch (RuntimeException ignored) {
+                // Heartbeat repair handles nodes that cannot receive gossip.
+            }
+        }
+    }
+
     private void configureCluster(List<NodeEndpoint> members, boolean rebalanceLocalKeys) {
         if (members.stream().noneMatch(member -> member.nodeId() == nodeId)) {
             throw new IllegalArgumentException("Member list does not contain this node: " + nodeId);
@@ -275,6 +299,25 @@ public final class ServiceChordNode {
         return deleted.map(ServiceStoredValue::value);
     }
 
+    public void acceptPrimaryRecord(int rawKey, String encodedRecord) {
+        int key = ring.normalize(rawKey);
+        if (!isResponsibleFor(key)) {
+            throw new IllegalStateException("Node " + nodeId + " is not responsible for key " + key);
+        }
+        ServiceStoredValue incoming = record(Optional.ofNullable(encodedRecord), nodeId)
+                .orElseGet(() -> ServiceStoredValue.create("", 1L, nodeId));
+        long currentVersion = record(store.get(key), nodeId)
+                .map(ServiceStoredValue::version)
+                .orElse(0L);
+        ServiceStoredValue accepted = ServiceStoredValue.create(incoming.value(),
+                Math.max(currentVersion, incoming.version()) + 1, nodeId);
+        store.put(key, accepted.encode());
+        replicaStore.delete(key);
+        replicatePrimary(key, accepted);
+        publish("KEY_TRANSFERRED_IN", details("key", String.valueOf(key), "ownerNodeId", String.valueOf(nodeId),
+                "version", String.valueOf(accepted.version())));
+    }
+
     private void propagateMembership(List<NodeEndpoint> members) {
         for (NodeEndpoint member : members) {
             try {
@@ -290,11 +333,16 @@ public final class ServiceChordNode {
         for (Map.Entry<Integer, String> entry : snapshot.entrySet()) {
             int key = ring.normalize(entry.getKey());
             if (!isResponsibleFor(key)) {
-                Optional<String> moved = store.delete(key);
-                if (moved.isPresent()) {
-                    ServiceStoredValue movedRecord = ServiceStoredValue.parse(moved.get(), nodeId)
-                            .orElseGet(() -> ServiceStoredValue.legacy(moved.get(), nodeId));
-                    put(key, movedRecord.value(), Collections.emptyList());
+                ServiceStoredValue movedRecord = ServiceStoredValue.parse(entry.getValue(), nodeId)
+                        .orElseGet(() -> ServiceStoredValue.legacy(entry.getValue(), nodeId));
+                NodeEndpoint newOwner = successorOf(key, new ArrayList<>(endpoints.values()));
+                try {
+                    new ServiceChordClient(newOwner.baseUri()).putPrimaryRecord(key, movedRecord.encode());
+                    store.delete(key);
+                    publish("KEY_TRANSFERRED_OUT", details("key", String.valueOf(key),
+                            "fromNodeId", String.valueOf(nodeId), "toNodeId", String.valueOf(newOwner.nodeId())));
+                } catch (RuntimeException ignored) {
+                    // Keep the local primary until the new owner confirms transfer.
                 }
             }
         }
@@ -485,6 +533,37 @@ public final class ServiceChordNode {
             }
         }
         return ordered.get(0);
+    }
+
+    private static List<NodeEndpoint> mergeMembers(List<NodeEndpoint> first, List<NodeEndpoint> second) {
+        Map<Integer, NodeEndpoint> merged = new LinkedHashMap<>();
+        for (NodeEndpoint member : second) {
+            merged.put(member.nodeId(), member);
+        }
+        for (NodeEndpoint member : first) {
+            merged.put(member.nodeId(), member);
+        }
+        List<NodeEndpoint> ordered = new ArrayList<>(merged.values());
+        ordered.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        return ordered;
+    }
+
+    private static boolean sameMembers(List<NodeEndpoint> first, List<NodeEndpoint> second) {
+        if (first.size() != second.size()) {
+            return false;
+        }
+        List<NodeEndpoint> orderedFirst = new ArrayList<>(first);
+        List<NodeEndpoint> orderedSecond = new ArrayList<>(second);
+        orderedFirst.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        orderedSecond.sort(Comparator.comparingInt(NodeEndpoint::nodeId));
+        for (int i = 0; i < orderedFirst.size(); i++) {
+            NodeEndpoint a = orderedFirst.get(i);
+            NodeEndpoint b = orderedSecond.get(i);
+            if (a.nodeId() != b.nodeId() || !a.baseUri().equals(b.baseUri())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static NodeEndpoint endpoint(int nodeId, String uri) {

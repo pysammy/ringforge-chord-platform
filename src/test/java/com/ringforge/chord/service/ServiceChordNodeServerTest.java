@@ -147,6 +147,8 @@ class ServiceChordNodeServerTest {
             for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
                 node.configureCluster(members);
             }
+            await(() -> read(endpoint(65, server65.port()).baseUri().resolve("/node/health"))
+                    .contains("\"status\":\"ok\""));
 
             ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
             ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65.port()).baseUri());
@@ -169,6 +171,54 @@ class ServiceChordNodeServerTest {
             assertEquals(Arrays.asList(0, 65), client65.members().stream()
                     .map(NodeEndpoint::nodeId)
                     .collect(Collectors.toList()));
+        }
+    }
+
+    @Test
+    void rejoiningNodeReceivesPromotedPrimaryForItsKeyRange() throws Exception {
+        ServiceChordNode node0 = new ServiceChordNode(0, 8);
+        ServiceChordNode node30 = new ServiceChordNode(30, 8);
+        ServiceChordNode node65 = new ServiceChordNode(65, 8);
+
+        try (ServiceChordNodeServer server0 = ServiceChordNodeServer.start(node0, 0);
+             ServiceChordNodeServer server30 = ServiceChordNodeServer.start(node30, 0)) {
+
+            ServiceChordNodeServer server65 = ServiceChordNodeServer.start(node65, 0);
+            List<NodeEndpoint> members = Arrays.asList(
+                    endpoint(0, server0.port()),
+                    endpoint(30, server30.port()),
+                    endpoint(65, server65.port())
+            );
+            for (ServiceChordNode node : Arrays.asList(node0, node30, node65)) {
+                node.configureCluster(members);
+            }
+
+            ServiceChordClient client0 = new ServiceChordClient(endpoint(0, server0.port()).baseUri());
+            client0.put(45, "returns-home", Collections.emptyList());
+            assertEquals("returns-home", new ServiceChordClient(endpoint(65, server65.port()).baseUri())
+                    .getLocal(45).orElseThrow(AssertionError::new));
+
+            server65.close();
+            client0.repairMembership();
+
+            ServiceLookupResult failoverLookup = client0.lookup(45, Collections.emptyList());
+            assertTrue(failoverLookup.found());
+            assertEquals(0, failoverLookup.responsibleNodeId());
+            assertEquals("returns-home", failoverLookup.value().orElseThrow(AssertionError::new));
+
+            ServiceChordNode rejoined65 = new ServiceChordNode(65, 8);
+            try (ServiceChordNodeServer server65b = ServiceChordNodeServer.start(rejoined65, 0)) {
+                rejoined65.joinVia(endpoint(65, server65b.port()), endpoint(0, server0.port()));
+                rejoined65.gossipMembership();
+                ServiceChordClient client65 = new ServiceChordClient(endpoint(65, server65b.port()).baseUri());
+
+                ServiceLookupResult restoredLookup = client0.lookup(45, Collections.emptyList());
+                assertTrue(restoredLookup.found());
+                assertEquals(65, restoredLookup.responsibleNodeId());
+                assertEquals("returns-home", restoredLookup.value().orElseThrow(AssertionError::new));
+                assertEquals("returns-home", client65.getLocal(45).orElseThrow(AssertionError::new));
+                assertTrue(client0.getLocal(45).isEmpty());
+            }
         }
     }
 

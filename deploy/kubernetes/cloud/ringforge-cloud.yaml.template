@@ -1,0 +1,537 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${RINGFORGE_NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ringforge
+    app.kubernetes.io/part-of: ringforge-chord-platform
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-kafka
+  namespace: ${RINGFORGE_NAMESPACE}
+  labels:
+    app.kubernetes.io/component: kafka
+spec:
+  selector:
+    app: ringforge-kafka
+  ports:
+    - name: broker
+      port: 9092
+      targetPort: 9092
+    - name: controller
+      port: 9093
+      targetPort: 9093
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-kafka
+  namespace: ${RINGFORGE_NAMESPACE}
+  labels:
+    app.kubernetes.io/component: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-kafka
+  template:
+    metadata:
+      labels:
+        app: ringforge-kafka
+        app.kubernetes.io/component: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.1
+          ports:
+            - containerPort: 9092
+            - containerPort: 9093
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_LISTENERS
+              value: PLAINTEXT://:9092,CONTROLLER://:9093
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://ringforge-kafka:9092
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@ringforge-kafka:9093
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_NUM_PARTITIONS
+              value: "1"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 45
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-redis-0
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  selector:
+    app: ringforge-redis-0
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-redis-0
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-redis-0
+  template:
+    metadata:
+      labels:
+        app: ringforge-redis-0
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-redis-30
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  selector:
+    app: ringforge-redis-30
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-redis-30
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-redis-30
+  template:
+    metadata:
+      labels:
+        app: ringforge-redis-30
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-redis-65
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  selector:
+    app: ringforge-redis-65
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-redis-65
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-redis-65
+  template:
+    metadata:
+      labels:
+        app: ringforge-redis-65
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-node-0
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  selector:
+    app: ringforge-node-0
+  ports:
+    - name: http
+      port: 5100
+      targetPort: 5100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-node-0
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-node-0
+  template:
+    metadata:
+      labels:
+        app: ringforge-node-0
+        app.kubernetes.io/component: dht-node
+    spec:
+      containers:
+        - name: node
+          image: ${RINGFORGE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceNodeMain
+            - --id
+            - "0"
+            - --port
+            - "5100"
+            - --host
+            - ringforge-node-0
+            - --heartbeat-ms
+            - "750"
+            - --storage
+            - redis
+            - --redis-host
+            - ringforge-redis-0
+            - --redis-prefix
+            - ringforge:node:0
+            - --kafka-bootstrap-servers
+            - ringforge-kafka:9092
+          ports:
+            - containerPort: 5100
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /node/health
+              port: 5100
+            initialDelaySeconds: 8
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /node/health
+              port: 5100
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-node-30
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  selector:
+    app: ringforge-node-30
+  ports:
+    - name: http
+      port: 5100
+      targetPort: 5100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-node-30
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-node-30
+  template:
+    metadata:
+      labels:
+        app: ringforge-node-30
+        app.kubernetes.io/component: dht-node
+    spec:
+      containers:
+        - name: node
+          image: ${RINGFORGE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceNodeMain
+            - --id
+            - "30"
+            - --port
+            - "5100"
+            - --host
+            - ringforge-node-30
+            - --join
+            - http://ringforge-node-0:5100
+            - --join-retries
+            - "60"
+            - --heartbeat-ms
+            - "750"
+            - --storage
+            - redis
+            - --redis-host
+            - ringforge-redis-30
+            - --redis-prefix
+            - ringforge:node:30
+            - --kafka-bootstrap-servers
+            - ringforge-kafka:9092
+          ports:
+            - containerPort: 5100
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /node/health
+              port: 5100
+            initialDelaySeconds: 8
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /node/health
+              port: 5100
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-node-65
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  selector:
+    app: ringforge-node-65
+  ports:
+    - name: http
+      port: 5100
+      targetPort: 5100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-node-65
+  namespace: ${RINGFORGE_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-node-65
+  template:
+    metadata:
+      labels:
+        app: ringforge-node-65
+        app.kubernetes.io/component: dht-node
+    spec:
+      containers:
+        - name: node
+          image: ${RINGFORGE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceNodeMain
+            - --id
+            - "65"
+            - --port
+            - "5100"
+            - --host
+            - ringforge-node-65
+            - --join
+            - http://ringforge-node-0:5100
+            - --join-retries
+            - "60"
+            - --heartbeat-ms
+            - "750"
+            - --storage
+            - redis
+            - --redis-host
+            - ringforge-redis-65
+            - --redis-prefix
+            - ringforge:node:65
+            - --kafka-bootstrap-servers
+            - ringforge-kafka:9092
+          ports:
+            - containerPort: 5100
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /node/health
+              port: 5100
+            initialDelaySeconds: 8
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /node/health
+              port: 5100
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ringforge-gateway
+  namespace: ${RINGFORGE_NAMESPACE}
+  labels:
+    app.kubernetes.io/component: gateway
+spec:
+  type: ${RINGFORGE_GATEWAY_SERVICE_TYPE}
+  selector:
+    app: ringforge-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringforge-gateway
+  namespace: ${RINGFORGE_NAMESPACE}
+  labels:
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringforge-gateway
+  template:
+    metadata:
+      labels:
+        app: ringforge-gateway
+        app.kubernetes.io/component: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: ${RINGFORGE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          args:
+            - com.ringforge.chord.app.ServiceGatewayServer
+            - --port
+            - "8081"
+            - --bootstrap
+            - http://ringforge-node-0:5100
+            - --kafka-bootstrap-servers
+            - ringforge-kafka:9092
+          ports:
+            - containerPort: 8081
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8081
+            initialDelaySeconds: 12
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 15

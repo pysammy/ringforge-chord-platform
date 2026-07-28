@@ -180,17 +180,27 @@ canvas {
 }
 
 .metric-grid,
-.scope-grid {
+.scope-grid,
+.system-status {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .metric-grid strong,
-.scope-grid strong {
+.scope-grid strong,
+.system-status strong {
   display: block;
   margin-bottom: 2px;
   color: var(--ink);
+}
+
+.system-status div {
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f9fbfd;
 }
 
 .node-list,

@@ -36,6 +36,10 @@ class ServiceGatewayServerTest {
             try (ServiceGatewayServer gateway = ServiceGatewayServer.start(endpoint(0, server0.port()).baseUri(), 0)) {
                 URI base = URI.create("http://localhost:" + gateway.port());
 
+                String health = request("GET", base.resolve("/api/health"));
+                assertTrue(health.contains("\"status\":\"ok\""));
+                assertTrue(health.contains("\"memberCount\":3"));
+
                 String put = request("POST", base.resolve("/api/dht/put?key=45&value=gateway-value"));
                 assertTrue(put.contains("\"status\":\"ok\""));
 

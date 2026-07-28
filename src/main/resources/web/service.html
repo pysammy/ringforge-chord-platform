@@ -49,15 +49,36 @@
             <div><strong>Routing</strong><span>Chord service nodes</span></div>
             <div><strong>Storage</strong><span>Redis primary and replica stores</span></div>
             <div><strong>Events</strong><span>Kafka service topic</span></div>
-            <div><strong>Deploy</strong><span>Docker Desktop Kubernetes</span></div>
+            <div><strong>Deploy</strong><span>Containerized Kubernetes services</span></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>System Status</h2>
+          <div class="system-status">
+            <div><strong>DHT API</strong><span>Gateway routes client operations into the ring.</span></div>
+            <div><strong>Node Runtime</strong><span>Each Chord node runs as its own service process.</span></div>
+            <div><strong>Durability</strong><span>Redis stores versioned primary and replica records.</span></div>
+            <div><strong>Audit Trail</strong><span>Kafka records writes, repairs, promotions, and deletes.</span></div>
           </div>
         </section>
 
         <section>
           <h2>Failure Demo</h2>
           <div class="runbook">
-            <code>kubectl --context docker-desktop -n ringforge-demo scale deployment/ringforge-node-65 --replicas=0</code>
+            <code>kubectl -n ringforge-demo scale deployment/ringforge-node-65 --replicas=0</code>
             <span>Refresh, then read key 45. A surviving replica should be promoted and remain readable.</span>
+          </div>
+        </section>
+
+        <section>
+          <h2>API Examples</h2>
+          <div class="runbook">
+            <code>POST /api/dht/put?key=45&amp;value=demo-value
+GET /api/dht/get?key=45
+POST /api/dht/delete?key=45
+GET /api/audit/events?limit=20
+GET /metrics</code>
           </div>
         </section>
 

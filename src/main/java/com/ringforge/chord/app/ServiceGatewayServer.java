@@ -49,6 +49,7 @@ public final class ServiceGatewayServer implements AutoCloseable {
         gateway.server.createContext("/api/dht/get", gateway::get);
         gateway.server.createContext("/api/dht/delete", gateway::delete);
         gateway.server.createContext("/api/audit/events", gateway::auditEvents);
+        gateway.server.createContext("/api/health", gateway::health);
         gateway.server.createContext("/api/cluster/members", gateway::members);
         gateway.server.createContext("/api/cluster/snapshot", gateway::snapshot);
         gateway.server.createContext("/api/cluster/ops-report", gateway::opsReport);
@@ -170,6 +171,18 @@ public final class ServiceGatewayServer implements AutoCloseable {
             sendJson(exchange, 200, json.toString());
         } catch (RuntimeException error) {
             sendJson(exchange, 500, error(error.getMessage()));
+        }
+    }
+
+    private void health(HttpExchange exchange) throws IOException {
+        if (!requireMethod(exchange, "GET")) {
+            return;
+        }
+        try {
+            List<NodeEndpoint> members = new ServiceChordClient(bootstrapUri, 800).members();
+            sendJson(exchange, 200, "{\"status\":\"ok\",\"memberCount\":" + members.size() + "}");
+        } catch (RuntimeException error) {
+            sendJson(exchange, 503, error(error.getMessage()));
         }
     }
 

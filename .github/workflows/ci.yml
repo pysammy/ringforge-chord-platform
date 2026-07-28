@@ -5,10 +5,30 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to Kubernetes using KUBE_CONFIG_B64 secret
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      public_base_url:
+        description: Optional public gateway URL for smoke test
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   test-and-package:
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -20,3 +40,53 @@ jobs:
         run: mvn test package
       - name: Docker build
         run: docker build -t ringforge-chord-platform:ci .
+      - id: image
+        name: Resolve image name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+  publish-image:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.deploy == 'true')
+    needs: test-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy == 'true'
+    needs:
+      - test-and-package
+      - publish-image
+    runs-on: ubuntu-latest
+    env:
+      RINGFORGE_NAMESPACE: ringforge-demo
+      RINGFORGE_GATEWAY_SERVICE_TYPE: LoadBalancer
+      RINGFORGE_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      KUBE_CONTEXT: ringforge-cloud
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "$HOME/.kube/config"
+          kubectl config rename-context "$(kubectl config current-context)" "$KUBE_CONTEXT"
+      - name: Deploy to Kubernetes
+        run: scripts/deploy-cloud-k8s.sh
+      - name: Public smoke test
+        if: inputs.public_base_url != ''
+        env:
+          RINGFORGE_BASE_URL: ${{ inputs.public_base_url }}
+        run: scripts/smoke-test-public.sh

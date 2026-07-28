@@ -332,3 +332,85 @@ Cleanup:
 ```bash
 scripts/cleanup-k8s.sh
 ```
+
+## Cloud Kubernetes Deployment
+
+This is the public deployment path. Unlike the local `kind-ringforge` deployment, this path assumes the application image is available in a registry and the gateway service can receive an external address from the Kubernetes provider.
+
+Build and publish image through GitHub Actions:
+
+```text
+push to main -> CI -> publish ghcr.io/pysammy/ringforge-chord-platform:<commit-sha>
+```
+
+Render the cloud manifest locally:
+
+```bash
+RINGFORGE_IMAGE=ghcr.io/pysammy/ringforge-chord-platform:<commit-sha> \
+RINGFORGE_NAMESPACE=ringforge-demo \
+scripts/render-cloud-manifest.sh
+```
+
+Deploy to a cloud cluster:
+
+```bash
+KUBE_CONTEXT=<your-cloud-context> \
+RINGFORGE_IMAGE=ghcr.io/pysammy/ringforge-chord-platform:<commit-sha> \
+scripts/deploy-cloud-k8s.sh
+```
+
+The cloud manifest includes:
+
+- `LoadBalancer` gateway service
+- resource requests and limits
+- node health probes
+- gateway health probe at `/api/health`
+- Redis, Kafka, three Chord service nodes, and the gateway
+- registry image usage with `imagePullPolicy: IfNotPresent`
+
+After the gateway receives a public address, run:
+
+```bash
+RINGFORGE_BASE_URL=http://<gateway-address> scripts/smoke-test-public.sh
+```
+
+The public smoke test verifies:
+
+- gateway health
+- three-node membership
+- DHT write/read/delete
+- key `45` ownership on node `65`
+- Prometheus metrics
+- Kafka audit events
+
+### GitHub Actions Deployment
+
+The workflow can also deploy manually from GitHub Actions.
+
+Required repository secret:
+
+```text
+KUBE_CONFIG_B64
+```
+
+This must be a base64-encoded kubeconfig for the target cloud cluster.
+
+Create it from a configured machine:
+
+```bash
+base64 -i ~/.kube/config | pbcopy
+```
+
+Then add it in GitHub:
+
+```text
+Repository -> Settings -> Secrets and variables -> Actions -> New repository secret
+```
+
+Manual deploy flow:
+
+```text
+Actions -> CI -> Run workflow -> deploy=true
+```
+
+If the gateway URL is already known, pass it as `public_base_url` to make the workflow run the public smoke test after deployment.

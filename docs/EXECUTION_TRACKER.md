@@ -4,7 +4,7 @@ This is the active build tracker for RingForge. Use this file before starting ne
 
 ## Current Summary
 
-Status: local productized platform is working; external deployment is not done yet.
+Status: local productized platform is working; cloud deployment artifacts are ready; external deployment execution is blocked until a cloud Kubernetes context or kubeconfig is provided.
 
 Latest pushed commits:
 
@@ -20,6 +20,9 @@ Validated locally:
 - Redis primary/replica records: validated
 - Kafka audit events: validated
 - node failure, replica promotion, node restore, ownership handoff, and delete: validated
+- cloud manifest rendering: implemented
+- public smoke-test script: implemented
+- GHCR image publishing workflow: implemented
 
 ## What Is Already Built
 
@@ -92,9 +95,9 @@ Status: complete and validated.
 
 ### 1. External Deployment Target
 
-Status: not started.
+Status: blocked on cloud access.
 
-Decision needed: choose where this should run publicly.
+Decision needed: choose where this should run publicly and provide access to that Kubernetes cluster.
 
 Recommended first real deployment target:
 
@@ -116,16 +119,13 @@ Acceptance criteria:
 
 ### 2. Production-Ready Container Publishing
 
-Status: not started.
+Status: implemented through GitHub Actions.
 
 Required work:
 
-- Add image tags based on Git commit SHA.
-- Push image to a registry:
-  - GitHub Container Registry, or
-  - Docker Hub, or
-  - cloud provider registry.
-- Update Kubernetes manifests to use the published image instead of `imagePullPolicy: Never`.
+- GitHub Actions publishes commit-SHA and `latest` images to GitHub Container Registry on `main`.
+- Cloud manifest uses the published image and `imagePullPolicy: IfNotPresent`.
+- Manual deploy workflow publishes the image before deploying.
 
 Acceptance criteria:
 
@@ -134,19 +134,15 @@ Acceptance criteria:
 
 ### 3. Cloud Kubernetes Manifests
 
-Status: not started.
+Status: implemented for first public deployment.
 
 Required work:
 
-- Create separate cloud manifests or Helm chart.
-- Remove local-only assumptions from the current manifest.
-- Add configurable image repository/tag.
-- Add resource requests/limits.
-- Add readiness and liveness probes.
-- Add namespace and labels.
-- Add gateway service exposure:
-  - `LoadBalancer` for cloud Kubernetes, or
-  - Ingress with TLS.
+- `deploy/kubernetes/cloud/ringforge-cloud.yaml.template` contains the cloud-ready manifest.
+- `scripts/render-cloud-manifest.sh` renders namespace, image, and gateway service type.
+- `scripts/deploy-cloud-k8s.sh` applies the manifest and waits for rollout.
+- The gateway is exposed as `LoadBalancer` by default.
+- Resource requests, limits, readiness probes, and liveness probes are included.
 
 Acceptance criteria:
 
@@ -174,7 +170,7 @@ Acceptance criteria:
 
 ### 5. CI/CD Deployment Pipeline
 
-Status: partially started.
+Status: implemented, pending cloud secret.
 
 Current CI:
 
@@ -183,10 +179,9 @@ Current CI:
 
 Remaining work:
 
-- Push image to registry on `main`.
-- Add deployment job for selected environment.
-- Add smoke test job after deployment.
-- Store credentials as GitHub Actions secrets.
+- Add `KUBE_CONFIG_B64` repository secret for the target cloud cluster.
+- Run the manual GitHub Actions deploy workflow with `deploy=true`.
+- Provide `public_base_url` to run post-deploy public smoke testing from CI.
 
 Acceptance criteria:
 
@@ -196,21 +191,11 @@ Acceptance criteria:
 
 ### 6. Public Demo Polish
 
-Status: partially complete.
+Status: complete for first public deployment.
 
 Remaining work:
 
-- Add a concise "system status" area in the frontend that explains:
-  - this is a distributed key-value platform,
-  - Redis stores node-owned data,
-  - Kafka records service events,
-  - Kubernetes runs separate node processes.
-- Add clearer failure-demo controls:
-  - show current node count,
-  - show key owner before failure,
-  - show promoted owner after failure,
-  - show owner after restore.
-- Add copyable API examples.
+- Optional future polish: add one-click failure orchestration from a secured admin endpoint.
 
 Acceptance criteria:
 
@@ -236,13 +221,12 @@ Important but not required before first deploy:
 
 ## Immediate Next Steps
 
-1. Choose the first external deployment target.
-2. Create/pick a container registry.
-3. Push a tagged image.
-4. Convert the local Kubernetes manifest into a cloud-ready manifest.
-5. Deploy to the cloud cluster.
-6. Run the same smoke test against the public gateway.
-7. Update README with the public demo URL and architecture notes.
+1. Provide or create a cloud Kubernetes cluster.
+2. Add the cluster kubeconfig as GitHub Actions secret `KUBE_CONFIG_B64`, or set local `KUBE_CONTEXT` to the cloud cluster.
+3. Push to `main` and confirm GHCR image publishing succeeds.
+4. Run `scripts/deploy-cloud-k8s.sh` locally or run the manual GitHub Actions deploy workflow.
+5. Run `scripts/smoke-test-public.sh` against the public gateway URL.
+6. Update README with the public demo URL.
 
 ## Current Local Commands
 

@@ -15,6 +15,7 @@ target/
 *.pid
 run_output*.txt
 .ringforge/
+deploy/kubernetes/cloud/*.rendered.yaml
 
 # Environment
 .env

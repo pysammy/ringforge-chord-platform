@@ -321,6 +321,16 @@ scripts/smoke-test-k8s.sh
 
 By default, the Kubernetes script creates or uses a dedicated Docker-backed `kind-ringforge` cluster, so it does not touch any unrelated local cluster.
 
+For a public Kubernetes deployment, publish the image through GitHub Actions and deploy the cloud manifest:
+
+```bash
+KUBE_CONTEXT=<your-cloud-context> \
+RINGFORGE_IMAGE=ghcr.io/pysammy/ringforge-chord-platform:<commit-sha> \
+scripts/deploy-cloud-k8s.sh
+
+RINGFORGE_BASE_URL=http://<gateway-address> scripts/smoke-test-public.sh
+```
+
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the validated Docker Compose and Kubernetes smoke-test flow.
 Use [docs/EXECUTION_TRACKER.md](docs/EXECUTION_TRACKER.md) as the active checklist for remaining deployment and hardening work.
 

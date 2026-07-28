@@ -322,6 +322,7 @@ scripts/smoke-test-k8s.sh
 By default, the Kubernetes script creates or uses a dedicated Docker-backed `kind-ringforge` cluster, so it does not touch any unrelated local cluster.
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the validated Docker Compose and Kubernetes smoke-test flow.
+Use [docs/EXECUTION_TRACKER.md](docs/EXECUTION_TRACKER.md) as the active checklist for remaining deployment and hardening work.
 
 The service-node runtime supports deterministic bootstrap join, retry-aware node startup, background heartbeat repair, successor replication, and replica promotion.
 
